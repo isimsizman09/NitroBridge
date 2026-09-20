@@ -1,0 +1,15 @@
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ * See LICENSE file for more information
+ */
+
+/* Yabdp4Nitro — Nitro reklamlarını gizler.
+ * Vencord kuralı gereği salt-gizleme işleri CSS ile yapılır.
+ * Sınıf karmaları her derlemede değiştiği için önek eşleşmesi kullanılır. */
+
+/* Yayın penceresi üst reklam şeridi */
+[class*="upsellRibbonContainer"] {
+    display: none !important;
+}
