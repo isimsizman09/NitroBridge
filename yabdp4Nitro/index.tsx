@@ -119,11 +119,19 @@ const EMOJI_PREFIX = "https://cdn.discordapp.com/emojis/";
 const EMOJI_MD_RE = /\[.*?\]\(https:\/\/cdn\.discordapp\.com\/emojis\/.*?\)/g;
 const CUSTOM_EMOJI_RE = /(?<!\\)<a?:\w+:(\d+)>/gi;
 
-// Clone keeping the class (store objects have methods; a plain spread would drop them
-// and crash screens that call them, e.g. profile settings).
+// Clone keeping the class AND the hidden methods (Discord defines e.g.
+// hasFlag as a non-enumerable own property; a plain spread drops it and
+// any screen calling user.hasFlag() crashes the whole client).
 function cloneWithProto<T extends object>(obj: T): T {
     try {
-        return Object.assign(Object.create(Object.getPrototypeOf(obj) ?? Object.prototype), obj);
+        const clone = Object.create(Object.getPrototypeOf(obj) ?? Object.prototype);
+        for (const key of Reflect.ownKeys(obj)) {
+            if (key === "__proto__") continue;
+            try {
+                Object.defineProperty(clone, key, Object.getOwnPropertyDescriptor(obj, key)!);
+            } catch { /* skip locked slots */ }
+        }
+        return clone;
     } catch {
         return { ...(obj as any) } as T;
     }
