@@ -119,9 +119,25 @@ const EMOJI_PREFIX = "https://cdn.discordapp.com/emojis/";
 const EMOJI_MD_RE = /\[.*?\]\(https:\/\/cdn\.discordapp\.com\/emojis\/.*?\)/g;
 const CUSTOM_EMOJI_RE = /(?<!\\)<a?:\w+:(\d+)>/gi;
 
+// Clone keeping the class (store objects have methods; a plain spread would drop them
+// and crash screens that call them, e.g. profile settings).
+function cloneWithProto<T extends object>(obj: T): T {
+    try {
+        return Object.assign(Object.create(Object.getPrototypeOf(obj) ?? Object.prototype), obj);
+    } catch {
+        return { ...(obj as any) } as T;
+    }
+}
+
 // Compare ignoring the "&seq" suffix we append.
 function normLink(url: string) {
     return url.replace(/&\d+$/, "");
+}
+
+// Emoji id from any Discord-hosted URL (direct or proxied).
+function emojiIdOf(url: string | undefined): string | null {
+    if (typeof url !== "string") return null;
+    return url.match(/emojis\/(\d+)\./)?.[1] ?? null;
 }
 
 // All emoji link targets inside a message (suffix ignored).
@@ -448,11 +464,23 @@ function stripMessageEmbeds(msg: any) {
         if (!settings.store.showAsEmoji) return;
         if (!msg || !Array.isArray(msg.embeds) || !msg.embeds.length) return;
         if (typeof msg.content !== "string" || !msg.content.includes("cdn.discordapp.com/emojis/")) return;
-        const hrefs = emojiHrefs(msg.content);
+        // Ids referenced in the text (markdown links and raw codes).
+        const wanted = new Set<string>();
+        for (const l of emojiHrefs(msg.content)) {
+            const id = emojiIdOf(l);
+            if (id) wanted.add(id);
+        }
+        CUSTOM_EMOJI_RE.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = CUSTOM_EMOJI_RE.exec(msg.content)) !== null) {
+            if (m[1]) wanted.add(m[1]);
+        }
+        CUSTOM_EMOJI_RE.lastIndex = 0;
+        if (!wanted.size) return;
+        // Previews may come proxied (media host), so match by emoji id anywhere in the URL.
         const kept = msg.embeds.filter((e: any) => {
-            const url = e?.url ?? e?.image?.url;
-            if (!url || !EMOJI_LINK_RE.test(url)) return true;
-            return !hrefs.includes(normLink(url));
+            const id = emojiIdOf(e?.url) ?? emojiIdOf(e?.image?.url);
+            return !id || !wanted.has(id);
         });
         if (kept.length !== msg.embeds.length) msg.embeds = kept;
     } catch { /* ignore */ }
@@ -1075,6 +1103,22 @@ export default definePlugin({
 
     transformContent(content: any[]) {
         if (!settings.store.showAsEmoji) return content;
+        // Jumbo when the message is nothing but our emojis and whitespace.
+        let jumboable = content.length === 1;
+        if (!jumboable) {
+            jumboable = content.length > 0 && content.every((n: any) => {
+                try {
+                    const href = n?.props?.href;
+                    if (typeof href === "string" && EMOJI_LINK_RE.test(href)) return true;
+                    const kids = n?.props?.children ?? (n as any)?.content;
+                    if (typeof kids === "string") return /^\s*$/.test(kids);
+                    if (typeof n === "string") return /^\s*$/.test(n);
+                    return false;
+                } catch {
+                    return false;
+                }
+            });
+        }
         const out: any[] = [];
         for (const node of content) {
             try {
@@ -1084,7 +1128,7 @@ export default definePlugin({
                     const id = m[1];
                     const name = EmojiStore.getCustomEmojiById(id)?.name ?? "emoji";
                     out.push(Parser.defaultRules.customEmoji.react({
-                        jumboable: content.length === 1,
+                        jumboable,
                         animated: isAnimatedHref(href, id),
                         emojiId: id,
                         name,
@@ -1477,7 +1521,7 @@ export default definePlugin({
             const s = settings.store;
             // Ignored user: hide real Nitro decor on them, don't read codes.
             if (profile.userId && isIgnored(profile.userId, "nitro")) {
-                const out = { ...profile };
+                const out = cloneWithProto(profile);
                 out.collectibles = undefined;
                 out.profileEffect = undefined;
                 out.profileFrame = undefined;
@@ -1488,14 +1532,15 @@ export default definePlugin({
             const encodingOff = !profile.userId || isIgnored(profile.userId, "encoding");
             // Effect hiding works without any bio (like the original).
             if (s.hideAllEffects && profile.profileEffect) {
-                profile = { ...profile, profileEffect: {} };
+                profile = cloneWithProto(profile);
+                profile.profileEffect = {};
             }
             if (!s.fakeThemes && !s.showBadges && !s.profileEffects && !s.profileFrames && !(s.profileV2 && !encodingOff)) return profile;
 
             const bio = profile.bio as string | undefined;
             let out = profile;
             const touch = () => {
-                if (out === profile) out = { ...profile };
+                if (out === profile) out = cloneWithProto(profile);
             };
             // Forcing the new layout needs code reading on (like the original).
             // Deliberate difference: the original writes unconditionally, we only
@@ -1554,13 +1599,12 @@ export default definePlugin({
             if (!user || !user.id) return user;
             // Ignored user: hide real Nitro decor on them, don't read codes.
             if (isIgnored(user.id, "nitro")) {
-                return {
-                    ...user,
-                    displayNameStyles: { colors: [] },
-                    avatarDecorationData: {},
-                    avatarDecoration: {},
-                    collectibles: {}
-                };
+                const out = cloneWithProto(user);
+                out.displayNameStyles = { colors: [] };
+                out.avatarDecorationData = {};
+                out.avatarDecoration = {};
+                out.collectibles = {};
+                return out;
             }
             if (isIgnored(user.id, "encoding")) return user;
             const s = settings.store;
@@ -1570,7 +1614,7 @@ export default definePlugin({
 
             let out = user;
             const touch = () => {
-                if (out === user) out = { ...user };
+                if (out === user) out = cloneWithProto(user);
             };
             if (s.displayStyles) {
                 const st = styleOf(bio);
