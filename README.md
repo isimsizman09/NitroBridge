@@ -29,7 +29,7 @@
 | | | |
 |:--:|:--:|:--:|
 | **Emoji bypass** — files, links, classic | **100MB Clips** — video, audio, any file | **Fake profile themes** |
-| <img src="https://github.com/user-attachments/assets/15df9ce9-cb2d-4ada-9070-2fd80e47db0e" width="320"> | <img src="https://github.com/user-attachments/assets/b140c90a-4688-4e91-b696-97f01d314e5c" width="320"> | <img src="https://github.com/user-attachments/assets/e86cbe19-b042-4d52-918c-d08cf86ad48f" width="320"> |
+| <img src="https://github.com/user-attachments/assets/10e96b02-57ae-4346-bcf9-b8b9d758e918" width="320"> | <img src="https://github.com/user-attachments/assets/b140c90a-4688-4e91-b696-97f01d314e5c" width="320"> | <img src="https://github.com/user-attachments/assets/e86cbe19-b042-4d52-918c-d08cf86ad48f" width="320"> |
 
 ## Features
 
@@ -50,6 +50,8 @@
 - Profile **themes, effects, frames, banners, photos**, avatar decorations, nameplates, name styles
 - Per-server codes, plugin **badges**, usrbg / userpfp database fallbacks
 - Built-in invisible-code generator (copy → paste into bio)
+
+<img src="https://github.com/riolubruh/YABDP4Nitro/assets/54255074/d9a2b6a4-dcdb-4fef-9310-5af30dffbfe6" width="480">
 
 </details>
 
@@ -99,7 +101,8 @@ pnpm build
 pnpm inject   # pick Discord PTB, then restart it
 
 # 2. This plugin
-Copy-Item -Recurse <this-repo>\yabdp4Nitro Vencord\src\userplugins\
+git clone https://github.com/isimsizman09/NitroBridge
+Copy-Item -Recurse NitroBridge\yabdp4Nitro Vencord\src\userplugins\
 cd Vencord
 pnpm build
 ```
