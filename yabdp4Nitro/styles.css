@@ -6,9 +6,9 @@
  * See LICENSE file for more information.
  */
 
-/* Yabdp4Nitro — Nitro reklamlarını gizler.
- * Vencord kuralı gereği salt-gizleme işleri CSS ile yapılır.
- * Sınıf karmaları her derlemede değiştiği için önek eşleşmesi kullanılır. */
+/* Hides Nitro ads.
+ * Per Vencord rules, pure hiding belongs in CSS.
+ * Prefix matching is used because class hashes rotate every build. */
 
 /* Yayın penceresi üst reklam şeridi */
 [class*="upsellRibbonContainer"] {

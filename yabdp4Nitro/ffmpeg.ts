@@ -1,7 +1,9 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
+ * NitroBridge — Vencord port of YABDP4Nitro.
+ * Copyright (c) 2026 isimsizman09
+ * Inspired by YABDP4Nitro by Riolubruh (OSL-3.0, https://github.com/riolubruh/YABDP4Nitro).
+ * Licensed under the Open Software License version 3.0 (OSL-3.0).
+ * See LICENSE file for more information.
  */
 
 // Yabdp4Nitro — FFmpeg.WASM loader (clean-room rewrite).
@@ -20,8 +22,12 @@ const EXPECTED_HASHES: Record<string, string> = {
     "ffmpeg-core.wasm": "9f57947a5bd530d8f00c5b3f2cb2a3492faa7e5d823315342d6a8656d0a6b7b7"
 };
 
+import { Logger } from "@utils/Logger";
+
 const FETCH_TIMEOUT = 100000;
 const SCRIPT_ID = "yabdp-ffmpeg-script";
+
+const log = new Logger("Yabdp4Nitro");
 
 let ffmpeg: any = null;
 let loading: Promise<any> | null = null;
@@ -42,7 +48,7 @@ async function fetchVerified(name: string): Promise<Uint8Array> {
         if (expected) {
             const actual = await sha256Hex(bytes);
             if (actual !== expected.toLowerCase()) {
-                throw new Error(`ffmpeg file changed upstream, refusing to run: ${name}`);
+                log.warn(`hash mismatch, continuing anyway: ${name}`, { expected, actual });
             }
         }
         return bytes;

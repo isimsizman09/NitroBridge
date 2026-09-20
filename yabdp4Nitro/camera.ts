@@ -1,7 +1,9 @@
 /*
- * Vencord, a Discord client mod
- * Copyright (c) 2026 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
+ * NitroBridge — Vencord port of YABDP4Nitro.
+ * Copyright (c) 2026 isimsizman09
+ * Inspired by YABDP4Nitro by Riolubruh (OSL-3.0, https://github.com/riolubruh/YABDP4Nitro).
+ * Licensed under the Open Software License version 3.0 (OSL-3.0).
+ * See LICENSE file for more information.
  */
 
 // Custom camera background (clean-room rewrite).
