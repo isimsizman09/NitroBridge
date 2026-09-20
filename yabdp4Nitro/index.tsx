@@ -2,7 +2,6 @@
  * Vencord, a Discord client mod
  * Copyright (c) 2026 Vendicated and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
- * See LICENSE file for more information
  */
 
 // Yabdp4Nitro — clean-room port of BetterDiscord's YABDP4Nitro for Vencord.
@@ -11,25 +10,26 @@
 
 import { addMessagePreEditListener, addMessagePreSendListener, removeMessagePreEditListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { SettingsStore } from "@api/Settings";
-import { findByProps, findByPropsLazy, findLazy, proxyLazyWebpack } from "@webpack";
+import { CloudDownloadIcon, CopyIcon, NoEntrySignIcon, OpenExternalIcon } from "@components/Icons";
 import { ApngBlendOp, ApngDisposeOp, parseAPNG } from "@utils/apng";
-import { getCurrentGuild, fetchUserProfile, sendMessage } from "@utils/discord";
+import { copyToClipboard } from "@utils/clipboard";
+import { fetchUserProfile, getCurrentGuild, sendMessage } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import type { Emoji } from "@vencord/discord-types";
-import { ChannelStore, ContextMenuApi, EmojiStore, FluxDispatcher, Menu, Parser, PermissionStore, PermissionsBits, PresenceStore, SoundboardStore, StickersStore, Toasts, UserProfileStore, UserSettingsActionCreators, UserSettingsProtoStore, UserStore } from "@webpack/common";
-import { CloudDownloadIcon, CopyIcon, NoEntrySignIcon, OpenExternalIcon } from "@components/Icons";
-import { copyToClipboard } from "@utils/clipboard";
+import { findByProps, findByPropsLazy, findLazy, proxyLazyWebpack } from "@webpack";
+import { ChannelStore, ContextMenuApi, EmojiStore, FluxDispatcher, Menu, Parser, PermissionsBits, PermissionStore, PresenceStore, SoundboardStore, StickersStore, Toasts, UserProfileStore, UserSettingsActionCreators, UserSettingsProtoStore, UserStore } from "@webpack/common";
 import { applyPalette, GIFEncoder, quantize } from "gifenc";
-import { badgesFor, bannerOf, clearRevealCache, decorOf, effectOf, extraFpsValues, frameOf, hasHiddenMark, photoOf, plateOf, styleOf, themeColorsOf } from "./profile";
+
+import { installCameraBg, uninstallCameraBg } from "./camera";
 import { decideClip, transcodeAudio, transcodeVideo, transcodeZip } from "./clips";
 import { ensureFFmpeg, unloadFFmpeg } from "./ffmpeg";
-import { installCameraBg, uninstallCameraBg } from "./camera";
-import { getSharpen, installSharpener, setSharpen, uninstallSharpener, ensureSharpener } from "./sharpen";
-import { installGoLiveUpsell, uninstallGoLiveUpsell } from "./runtime";
 import { isIgnored, toggleIgnore } from "./ignores";
 import { T } from "./lang";
+import { badgesFor, bannerOf, clearRevealCache, decorOf, effectOf, extraFpsValues, frameOf, hasHiddenMark, photoOf, plateOf, styleOf, themeColorsOf } from "./profile";
+import { installGoLiveUpsell, uninstallGoLiveUpsell } from "./runtime";
 import { ProfileSettingsUI, settings } from "./settings";
+import { ensureSharpener,getSharpen, installSharpener, setSharpen, uninstallSharpener } from "./sharpen";
 
 // Menu header, so it's clear which plugin owns the item (like the original).
 function menuLabel(text: string) {
@@ -68,7 +68,7 @@ async function downloadAttachments(files: any[], zipName: string) {
             bad++;
             return;
         }
-        let name = r.value.name;
+        let { name } = r.value;
         if (zipped[name]) {
             const dot = name.lastIndexOf(".");
             const base = dot > 0 ? name.slice(0, dot) : name;
@@ -157,7 +157,8 @@ function canUseInChannel(channelId: string, perm: bigint) {
 
 function hasNitro() {
     try {
-        return (UserStore.getCurrentUser()?.premiumType ?? 0) > 0;
+        // Only full Nitro (2) counts: Basic/Classic lack animated/external perks.
+        return UserStore.getCurrentUser()?.premiumType === 2;
     } catch {
         return false;
     }
@@ -423,6 +424,13 @@ function syncCameraBg() {
             return;
         }
         installCameraBg(link, String((settings.store as any).videoFilterType ?? "png") === "mp4");
+    } catch { /* ignore */ }
+}
+
+// (Re)install the GoLive upsell hiding from settings.
+function syncGoLiveUpsell() {
+    try {
+        installGoLiveUpsell();
     } catch { /* ignore */ }
 }
 
@@ -1097,10 +1105,10 @@ export default definePlugin({
         try {
             const s = settings.store;
             if (!s.streamUnlock) return;
-            // Clamp numbers into a safe range (-1 = let Discord decide).
+            // Clamp numbers into a safe range (-1 = let Discord decide, 0 counts as auto too).
             const clamp = (v: unknown, max: number) => {
                 const n = Number(v);
-                if (!Number.isFinite(n) || n < 0) return -1;
+                if (!Number.isFinite(n) || n <= 0) return -1;
                 return Math.min(n, max);
             };
             const voice = clamp(s.voiceBitrate, 512);
@@ -1256,6 +1264,7 @@ export default definePlugin({
             const needed = list.some(up => {
                 const file = up?.item?.file;
                 if (!(file instanceof File)) return false;
+                if (up?.clip || up?.item?.clip || convertedFiles.has(file)) return false;
                 return decideClip({ name: file.name, size: file.size, type: file.type }, opts) !== "skip";
             });
             if (!needed) return uploads;
@@ -1397,10 +1406,6 @@ export default definePlugin({
         try {
             if (!userId || settings.store.customPhotos === false) return;
             if (isIgnored(userId, "encoding")) return;
-            if (settings.store.userPfp !== false) {
-                const db = userpfpUrl(userId);
-                if (db) return db;
-            }
             const bio = UserProfileStore.getUserProfile(userId)?.bio as string | undefined;
             const fromBio = photoOf(bio);
             if (fromBio) return fromBio;
@@ -1408,10 +1413,11 @@ export default definePlugin({
                 const status = (PresenceStore as any)?.getActivities?.(userId)?.find?.(
                     (a: any) => a?.name === "Custom Status" || a?.id === "custom"
                 )?.state as string | undefined;
-                return photoOf(status) ?? undefined;
-            } catch {
-                return;
-            }
+                const fromStatus = photoOf(status);
+                if (fromStatus) return fromStatus;
+            } catch { /* ignore */ }
+            if (settings.store.userPfp !== false) return userpfpUrl(userId);
+            return;
         } catch {
             return;
         }
@@ -1473,6 +1479,8 @@ export default definePlugin({
                 out.collectibles = undefined;
                 out.profileEffect = undefined;
                 out.profileFrame = undefined;
+                out.themeColors = undefined;
+                out.premiumType = 0;
                 return out;
             }
             const encodingOff = !profile.userId || isIgnored(profile.userId, "encoding");
@@ -1609,6 +1617,7 @@ export default definePlugin({
             SettingsStore.addChangeListener("plugins.Yabdp4Nitro.videoFilter", syncCameraBg);
             SettingsStore.addChangeListener("plugins.Yabdp4Nitro.videoFilterLink", syncCameraBg);
             SettingsStore.addChangeListener("plugins.Yabdp4Nitro.videoFilterType", syncCameraBg);
+            SettingsStore.addChangeListener("plugins.Yabdp4Nitro.streamUnlock", syncGoLiveUpsell);
         } catch { /* ignore */ }
         FluxDispatcher.subscribe("MESSAGE_CREATE", this.handleNewMessage);
         FluxDispatcher.subscribe("LOAD_MESSAGES_SUCCESS", this.handleLoadedMessages);
@@ -1899,6 +1908,7 @@ export default definePlugin({
             SettingsStore.removeChangeListener("plugins.Yabdp4Nitro.videoFilter", syncCameraBg);
             SettingsStore.removeChangeListener("plugins.Yabdp4Nitro.videoFilterLink", syncCameraBg);
             SettingsStore.removeChangeListener("plugins.Yabdp4Nitro.videoFilterType", syncCameraBg);
+            SettingsStore.removeChangeListener("plugins.Yabdp4Nitro.streamUnlock", syncGoLiveUpsell);
         } catch { /* ignore */ }
         removeRuntimeFps();
         uninstallCameraBg();

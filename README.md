@@ -18,7 +18,7 @@
 > ### Credit
 >
 > All feature ideas belong to **[YABDP4Nitro](https://github.com/riolubruh/YABDP4Nitro)** by **[Riolubruh](https://github.com/riolubruh)** (BetterDiscord, OSL-3.0), built with the author's kind permission — own repo, new name, credit given.
-> This is a clean-room reimplementation for Vencord: no code was copied from the original.
+> This port was rewritten from scratch for Vencord: no code was copied from the original.
 >
 > _"Discord" and "Nitro" are trademarks of Discord Inc. This project is not affiliated with, endorsed by, or monetarily benefiting from Discord Inc._
 
@@ -100,19 +100,23 @@ pnpm install --frozen-lockfile
 pnpm build
 pnpm inject   # pick Discord PTB, then restart it
 
-# 2. This plugin
+# 2. This plugin (needs Node LTS + pnpm)
 git clone https://github.com/isimsizman09/NitroBridge
+New-Item -ItemType Directory -Path Vencord\src\userplugins -Force
 Copy-Item -Recurse NitroBridge\yabdp4Nitro Vencord\src\userplugins\
 cd Vencord
+pnpm install --frozen-lockfile
 pnpm build
 ```
 
 Restart Discord PTB (or press `Ctrl+R`), open Settings → Vencord → Plugins, enable **Yabdp4Nitro**.
 
+> Rebuild (`pnpm build` + restart) after every Discord update, or patches may silently stop matching.
+
 ## Notes & risks
 
 - ⚠️ **Use a spare account for the risky toggles.** Clip uploads, stream unlocks, and status spoofing bend Discord's rules — risky settings say so in their descriptions.
-- Clips convert locally; FFmpeg.WASM downloads on first use from a pinned build.
+- Clips convert locally; FFmpeg.WASM downloads on first use from a commit-pinned build (hash-checked).
 - Fake profile codes only render for people running this (or a compatible 3y3) plugin.
 - ZipClips open with 7-Zip/WinRAR after removing the trailing `.mp4` (Explorer's built-in zip cannot open them).
 

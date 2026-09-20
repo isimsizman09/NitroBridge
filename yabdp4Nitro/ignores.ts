@@ -2,7 +2,6 @@
  * Vencord, a Discord client mod
  * Copyright (c) 2026 Vendicated and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
- * See LICENSE file for more information
  */
 
 // Yabdp4Nitro — per-user ignore store (clean-room rewrite).
@@ -20,7 +19,14 @@ type IgnoreMap = Record<string, IgnoreFlags>;
 
 function readAll(): IgnoreMap {
     try {
-        return (settings.store.ignores as IgnoreMap) ?? {};
+        const raw = settings.store.ignores as unknown;
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+        const clean: IgnoreMap = {};
+        for (const [id, flags] of Object.entries(raw as IgnoreMap)) {
+            if (!/^\d+$/.test(id) || !flags || typeof flags !== "object") continue;
+            clean[id] = { nitro: !!flags.nitro, encoding: !!flags.encoding };
+        }
+        return clean;
     } catch {
         return {};
     }
@@ -29,7 +35,7 @@ function readAll(): IgnoreMap {
 function writeAll(map: IgnoreMap) {
     try {
         (settings.store as any).ignores = map;
-    } catch { /* sessiz geç */ }
+    } catch { /* ignore */ }
 }
 
 export function toggleIgnore(id: string, key: "nitro" | "encoding") {

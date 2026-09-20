@@ -2,7 +2,6 @@
  * Vencord, a Discord client mod
  * Copyright (c) 2026 Vendicated and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
- * See LICENSE file for more information
  */
 
 // Language helpers. The plugin is English-first: Turkish strings are only

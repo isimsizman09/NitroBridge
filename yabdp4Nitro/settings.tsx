@@ -2,7 +2,6 @@
  * Vencord, a Discord client mod
  * Copyright (c) 2026 Vendicated and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
- * See LICENSE file for more information
  */
 
 // Yabdp4Nitro settings. Grouped and collapsible: tapping a section header
@@ -10,9 +9,9 @@
 // Display language follows Discord: Turkish client -> Turkish, else English.
 
 import { definePluginSettings } from "@api/Settings";
+import { GithubIcon } from "@components/Icons";
 import { copyWithToast } from "@utils/discord";
 import { OptionType } from "@utils/types";
-import { GithubIcon } from "@components/Icons";
 import { Button, Forms, TextInput, UserStore, useState } from "@webpack/common";
 import type { ReactNode } from "react";
 
@@ -313,7 +312,7 @@ export const settings = definePluginSettings({
     secSticker: {
         type: OptionType.COMPONENT,
         component: () => <SectionHead id="sticker" title={T("Çıkartma", "Stickers")} desc={T("Başka sunucuların çıkartmalarını dosya olarak gönderme.", "Send other servers' stickers as files.")} />
-    },    stickerBypass: {
+    }, stickerBypass: {
         get description() { return T("Başka sunucunun çıkartmasını dosya olarak gönder (orijinalde kapalı gelir)", "Send other servers' stickers as files (off in the original)"); },
         type: OptionType.BOOLEAN,
         default: false,
@@ -454,6 +453,7 @@ export const settings = definePluginSettings({
         get description() { return T("Mesaj sağ-tık ek menüsü (tüm ekleri indirme)", "Extra message right-click menu (download all attachments)"); },
         type: OptionType.BOOLEAN,
         default: true,
+        restartNeeded: true,
         hidden: () => isShut("misc")
     },
 

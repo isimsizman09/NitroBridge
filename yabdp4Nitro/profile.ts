@@ -1,4 +1,10 @@
-﻿// Yabdp4Nitro — profile tricks, 3y3 hidden-text decoding (clean-room rewrite).
+﻿/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 Vendicated and contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+// Yabdp4Nitro — profile tricks, 3y3 hidden-text decoding (clean-room rewrite).
 // Idea: read bio-hidden data and apply it to profiles.
 // Inspired by YABDP4Nitro (OSL-3.0) and Vencord's FakeProfileThemes. No copied code.
 //
@@ -155,7 +161,7 @@ export function styleOf(bio: string | null | undefined): NameStyle | null {
     if (!m) return null;
     const parts = m[1].split(",").map(s => Number(s.trim()));
     if (parts.length < 2 || parts.some(n => !Number.isInteger(n) || n < 0)) return null;
-    return { fontId: parts[0], effectId: parts[1], colors: parts.slice(2, 10) };
+    return { fontId: parts[0], effectId: parts[1], colors: parts.slice(2, 10).map(c => Math.min(c, 0xFFFFFF)) };
 }
 
 export function bannerOf(bio: string | null | undefined): string | null {

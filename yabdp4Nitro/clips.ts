@@ -2,7 +2,6 @@
  * Vencord, a Discord client mod
  * Copyright (c) 2026 Vendicated and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
- * See LICENSE file for more information
  */
 
 // Yabdp4Nitro — clip conversion logic (clean-room rewrite).
@@ -80,7 +79,7 @@ const ARCHIVE_MIMES = new Set([
     "x-zip-compressed"
 ]);
 
-const ARCHIVE_EXTS = [".zip", ".7z", ".rar", ".tar", ".gz", ".bz2"];
+const ARCHIVE_EXTS = [".zip", ".7z", ".rar", ".tar", ".gz", ".bz2", ".tgz", ".tbz2", ".xz", ".zst"];
 
 function isArchiveName(name: string) {
     const lower = name.toLowerCase();
@@ -107,7 +106,7 @@ export function decideClip(
 ): ClipJob {
     const name = file.name ?? "";
     const size = file.size ?? 0;
-    const type = file.type ?? "";
+    const type = (file.type ?? "").toLowerCase();
     if (!name || size <= 0 || size > CLIP_LIMIT) return "skip";
     if (isSkippedType(type)) return "skip";
     // Original else-if chain: video first, then audio, zip last.
@@ -177,7 +176,8 @@ export function buildClipTag(
             tag.id = (BigInt(now) - BigInt(SNOWFLAKE_EPOCH)) << 22n;
             tag.createdAt = now;
         } else if (stamp === 2) {
-            const ts = Number(lastModified) || Date.now();
+            let ts = Number(lastModified) || Date.now();
+            ts = Math.min(Math.max(ts, SNOWFLAKE_EPOCH), Date.now());
             tag.id = (BigInt(ts) - BigInt(SNOWFLAKE_EPOCH)) << 22n;
             tag.createdAt = ts;
         }
@@ -198,9 +198,19 @@ function outNameFor(type: string) {
     return MOV_TYPES.has(type) ? "out.mov" : "out.mp4";
 }
 
+// Unique working names: conversions can overlap (attach while another runs)
+// and share one FFmpeg filesystem.
+let tmpSeq = 0;
+
+function tmpName(base: string) {
+    tmpSeq = (tmpSeq + 1) % 1000000;
+    const safe = String(base || "file").replace(/[^\w.-]/g, "_").slice(-80) || "file";
+    return `${tmpSeq}_${safe}`;
+}
+
 function inNameFor(fileName: string, outName: string) {
-    if (!fileName || fileName === outName) return "in_" + (fileName || "file");
-    return fileName;
+    if (!fileName || fileName === outName) return tmpName("in_" + (fileName || "file"));
+    return tmpName(fileName);
 }
 
 function appendUdta(raw: Uint8Array): Uint8Array {
@@ -213,30 +223,37 @@ function appendUdta(raw: Uint8Array): Uint8Array {
 async function finalizeClip(
     ff: any,
     raw: Uint8Array,
-    inName: string,
-    outName: string,
     file: File,
     kind: ClipJob,
     meId: string,
     stamp: number,
-    emptyErr: string
+    emptyErr: string,
+    finalSize?: number
 ) {
     if (!raw.length) throw new Error(emptyErr);
     const out = appendUdta(raw);
-    await ff.deleteFile(inName).catch(() => {});
-    await ff.deleteFile(outName).catch(() => {});
     const finalName = clipFileName(file.name, kind);
     return {
         file: new File([out as Uint8Array<ArrayBuffer>], finalName, { type: "video/mp4" }),
-        clip: buildClipTag(meId, finalName, file.size, file.lastModified || Date.now(), stamp)
+        clip: buildClipTag(meId, finalName, finalSize ?? file.size, file.lastModified || Date.now(), stamp)
     };
 }
 
+async function runFfmpeg(ff: any, inName: string, outName: string, args: string[]): Promise<Uint8Array> {
+    try {
+        await ff.exec(args);
+        return new Uint8Array(await ff.readFile(outName) as unknown as ArrayBuffer);
+    } finally {
+        await ff.deleteFile(inName).catch(() => {});
+        await ff.deleteFile(outName).catch(() => {});
+    }
+}
+
 export async function transcodeVideo(ff: any, file: File, meId: string, stamp = 2) {
-    const outName = outNameFor(file.type);
+    const outName = tmpName(outNameFor(file.type));
     const inName = inNameFor(file.name, outName);
     await writeInput(ff, inName, file);
-    await ff.exec([
+    const raw = await runFfmpeg(ff, inName, outName, [
         "-i", inName,
         "-c:v", "copy",
         "-c:a", "copy",
@@ -251,15 +268,14 @@ export async function transcodeVideo(ff: any, file: File, meId: string, stamp = 
         "-strict", "-2",
         outName
     ]);
-    const raw = new Uint8Array(await ff.readFile(outName) as unknown as ArrayBuffer);
-    return finalizeClip(ff, raw, inName, outName, file, "video", meId, stamp, "empty video output");
+    return finalizeClip(ff, raw, file, "video", meId, stamp, "empty video output", raw.length + UDTA.length);
 }
 
 export async function transcodeAudio(ff: any, file: File, meId: string, stamp = 2) {
-    const outName = outNameFor(file.type);
+    const outName = tmpName(outNameFor(file.type));
     const inName = inNameFor(file.name, outName);
     await writeInput(ff, inName, file);
-    await ff.exec([
+    const raw = await runFfmpeg(ff, inName, outName, [
         "-i", inName,
         "-f", "lavfi",
         "-i", "color=c=black:s=300x100",
@@ -285,44 +301,55 @@ export async function transcodeAudio(ff: any, file: File, meId: string, stamp = 
         "-max_interleave_delta", "1",
         outName
     ]);
-    const raw = new Uint8Array(await ff.readFile(outName) as unknown as ArrayBuffer);
-    return finalizeClip(ff, raw, inName, outName, file, "audio", meId, stamp, "empty audio output");
+    return finalizeClip(ff, raw, file, "audio", meId, stamp, "empty audio output", raw.length + UDTA.length);
 }
 
 export async function transcodeZip(ff: any, file: File, meId: string, stamp = 2) {
+    if (!file.size || file.size > CLIP_LIMIT) throw new Error("file out of clip range");
     const bytes = new Uint8Array(await file.arrayBuffer());
     const archive = isArchiveName(file.name) || isArchiveMime(file.type ?? "");
-    // Zip entries are bare names (no folder escapes).
-    const entryName = (file.name.split(/[/\\]/).pop() || "file").replace(/^\.+/, "") || "file";
+    // Zip entries are bare names (no folder escapes, no control chars).
+    const entryName = (file.name.split(/[/\\]/).pop() || "file").replace(/^\.+/, "").replace(/[\x00-\x1f\x7f<>:"|?*]/g, "_").slice(0, 100) || "file";
     const payload = archive
         ? bytes
         : zipSync({ [entryName]: bytes }, { level: 6 });
     // Build a real short silent/black base video (not a single-frame image).
-    await ff.exec([
-        "-f", "lavfi",
-        "-i", "color=c=black:s=128x96:duration=1",
-        "-f", "lavfi",
-        "-i", "anullsrc=r=44100:cl=mono",
-        "-shortest",
-        "-fflags", "+shortest",
-        "-brand", "isom/avc1",
-        "-movflags", "+faststart",
-        "-map_metadata", "-1",
-        "-preset", "ultrafast",
-        "-vframes", "5",
-        "-c:v", "mjpeg",
-        "output.mp4"
-    ]);
-    const base = new Uint8Array(await ff.readFile("output.mp4") as unknown as ArrayBuffer);
-    if (!base.length) throw new Error("zip base failed to render");
-    const withTag = appendUdta(base);
-    await ff.deleteFile("output.mp4").catch(() => {});
+    const tmpOut = tmpName("output.mp4");
+    let base: Uint8Array;
+    try {
+        await ff.exec([
+            "-f", "lavfi",
+            "-i", "color=c=black:s=128x96:duration=1",
+            "-f", "lavfi",
+            "-i", "anullsrc=r=44100:cl=mono",
+            "-shortest",
+            "-fflags", "+shortest",
+            "-brand", "isom/avc1",
+            "-movflags", "+faststart",
+            "-map_metadata", "-1",
+            "-preset", "ultrafast",
+            "-vframes", "5",
+            "-c:v", "mjpeg",
+            tmpOut
+        ]);
+        base = new Uint8Array(await ff.readFile(tmpOut) as unknown as ArrayBuffer);
+    } finally {
+        await ff.deleteFile(tmpOut).catch(() => {});
+    }
+    if (!base!.length || !isMp4(base!)) throw new Error("zip base failed to render");
+    const withTag = appendUdta(base!);
     const out = new Uint8Array(withTag.length + payload.length);
     out.set(withTag, 0);
     out.set(payload, withTag.length);
     const outName = clipFileName(file.name, "zip");
     return {
         file: new File([out as Uint8Array<ArrayBuffer>], outName, { type: "video/mp4" }),
-        clip: buildClipTag(meId, outName, file.size, file.lastModified || Date.now(), stamp)
+        clip: buildClipTag(meId, outName, out.length, file.lastModified || Date.now(), stamp)
     };
+}
+
+function isMp4(data: Uint8Array): boolean {
+    return data.length > 8
+        && data[4] === 0x66 && data[5] === 0x74
+        && data[6] === 0x79 && data[7] === 0x70;
 }

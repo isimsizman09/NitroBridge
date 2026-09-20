@@ -2,7 +2,6 @@
  * Vencord, a Discord client mod
  * Copyright (c) 2026 Vendicated and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
- * See LICENSE file for more information
  */
 
 // Custom camera background (clean-room rewrite).
@@ -11,8 +10,8 @@
 // and when it gets picked, feed the media engine our own image/video bytes.
 // All lookups happen at runtime (minified names shift every build).
 
-import { findAll } from "@webpack";
 import { Logger } from "@utils/Logger";
+import { findAll } from "@webpack";
 
 import { factorySource, findModuleByNeedles } from "./wfind";
 
@@ -22,23 +21,35 @@ const PRESET_ANCHOR = "52f91129995158682c465310f61e64cd61fbf227f0dc6b43313c5e822
 const HANDLER_ANCHOR = ".gO.BACKGROUND_BLUR);if";
 const TARGET_WIDTH = 1280;
 const TARGET_HEIGHT = 720;
+// Camera backgrounds bigger than this are refused (memory safety).
+const MAX_BG_BYTES = 32 * 1024 * 1024;
 
 let undo: Array<() => void> = [];
+let installGen = 0;
 
-async function fetchBytes(link: string): Promise<Uint8ClampedArray> {
+async function fetchBytes(link: string, signal?: AbortSignal): Promise<Uint8ClampedArray> {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 60000);
+    const onAbort = () => ctrl.abort();
     try {
+        try {
+            signal?.addEventListener("abort", onAbort, { once: true });
+        } catch { /* ignore */ }
         const res = await fetch(link, { signal: ctrl.signal });
         if (!res.ok) throw new Error(`background download failed ${res.status}`);
-        return new Uint8ClampedArray(await res.arrayBuffer());
+        const buf = await res.arrayBuffer();
+        if (buf.byteLength > MAX_BG_BYTES) throw new Error("background too large");
+        return new Uint8ClampedArray(buf);
     } finally {
         clearTimeout(timer);
+        try {
+            signal?.removeEventListener?.("abort", onAbort);
+        } catch { /* ignore */ }
     }
 }
 
-async function fetchImage(link: string) {
-    const bytes = await fetchBytes(link);
+async function fetchImage(link: string, signal?: AbortSignal) {
+    const bytes = await fetchBytes(link, signal);
     const url = URL.createObjectURL(new Blob([bytes as Uint8ClampedArray<ArrayBuffer>]));
     try {
         const img = new Image();
@@ -62,6 +73,7 @@ async function fetchImage(link: string) {
 export function uninstallCameraBg() {
     const jobs = undo;
     undo = [];
+    installGen++;
     for (const fn of jobs) {
         try {
             fn();
@@ -102,6 +114,8 @@ export function installCameraBg(link: string, video: boolean): boolean {
             const res = origA.apply(this, args);
             try {
                 if (res && typeof res === "object") {
+                    const taken = res[CUSTOM_ID];
+                    if (taken && taken.id !== CUSTOM_ID && taken.source !== link) return res;
                     res[CUSTOM_ID] = {
                         id: CUSTOM_ID,
                         name: "My Custom Background",
@@ -128,11 +142,14 @@ export function installCameraBg(link: string, video: boolean): boolean {
                 try {
                     const [type, target, option] = args;
                     if (option === CUSTOM_ID) {
+                        const gen = installGen;
+                        const ctrl = new AbortController();
                         void (async () => {
                             try {
                                 const payload = video
-                                    ? { blob: await fetchBytes(link) }
-                                    : { image: await fetchImage(link) };
+                                    ? { blob: await fetchBytes(link, ctrl.signal) }
+                                    : { image: await fetchImage(link, ctrl.signal) };
+                                if (gen !== installGen) return;
                                 mediaWq({ [type]: { graph: replacement, target, ...payload } });
                             } catch (err) {
                                 log.warn("custom background apply failed", err);

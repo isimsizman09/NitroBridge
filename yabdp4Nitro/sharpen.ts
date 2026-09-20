@@ -2,7 +2,6 @@
  * Vencord, a Discord client mod
  * Copyright (c) 2026 Vendicated and contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
- * See LICENSE file for more information
  */
 
 // Per-user stream sharpness (clean-room rewrite).
@@ -11,11 +10,11 @@
 // follows the per-user slider value. The SVG travels inside a data URI, so
 // no extra DOM nodes are needed. All lookups happen at runtime.
 
-import { wreq } from "@webpack";
 import { Logger } from "@utils/Logger";
+import { wreq } from "@webpack";
 
 import { settings } from "./settings";
-import { factorySource, findModuleByNeedles } from "./wfind";
+import { factorySource } from "./wfind";
 
 const log = new Logger("Yabdp4Nitro");
 
