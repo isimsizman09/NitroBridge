@@ -29,7 +29,7 @@
 | | | |
 |:--:|:--:|:--:|
 | **Emoji bypass** — files, links, classic | **100MB Clips** — video, audio, any file | **Fake profile themes** |
-| <img src="https://github.com/user-attachments/assets/23494137-ba02-4ada-9070-2fd80e47db0e" width="320"> | <img src="https://github.com/user-attachments/assets/b140c90a-4688-4e91-b696-97f01d314e5c" width="320"> | <img src="https://github.com/user-attachments/assets/e86cbe19-b042-4d52-918c-d08cf86ad48f" width="320"> |
+| <img src="https://github.com/user-attachments/assets/15df9ce9-cb2d-4ada-9070-2fd80e47db0e" width="320"> | <img src="https://github.com/user-attachments/assets/b140c90a-4688-4e91-b696-97f01d314e5c" width="320"> | <img src="https://github.com/user-attachments/assets/e86cbe19-b042-4d52-918c-d08cf86ad48f" width="320"> |
 
 ## Features
 
@@ -60,7 +60,7 @@
 - **Per-user sharpness slider** (right-click a stream), **custom camera background**
 - GoLive ad hiding
 
-<img src="https://github.com/user-attachments/assets/20f6f672-0b46-445d-a3cd-e198b1900" width="480">
+<img src="https://github.com/user-attachments/assets/ddd88edf-1745-4a4b-b094-e794c71d85bc" width="480">
 
 </details>
 
