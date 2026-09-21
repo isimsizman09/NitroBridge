@@ -122,10 +122,11 @@ export function installSharpener(): boolean {
                 const userId = typeof bgKey === "string" ? bgKey.split(":")[3] : undefined;
                 if (!userId || !/^\d+$/.test(userId)) return ret;
                 const filter = filterFor(userId);
-                const kids = ret?.props?.children;
-                if (Array.isArray(kids) && kids[0]?.props && filter) {
-                    kids[0] = { ...kids[0], props: { ...kids[0].props, style: { ...kids[0].props.style, filter } } };
-                }
+                const rawKids = ret?.props?.children;
+                const kids = Array.isArray(rawKids) ? rawKids : (rawKids ? [rawKids] : null);
+                if (!kids || !kids[0]?.props || !filter) return ret;
+                kids[0] = { ...kids[0], props: { ...kids[0].props, style: { ...kids[0].props.style, filter } } };
+                if (!Array.isArray(rawKids)) ret.props.children = kids.length === 1 ? kids[0] : kids;
             } catch (err) {
                 log.warn("sharpen apply failed", err);
             }

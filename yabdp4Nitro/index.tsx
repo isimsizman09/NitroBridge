@@ -49,38 +49,41 @@ async function downloadAttachments(files: any[], zipName: string) {
         Toasts.show({ message: T("Ek bulunamadı", "No attachments found"), id: Toasts.genId(), type: Toasts.Type.FAILURE });
         return;
     }
+    // One at a time with caps: parallel multi-GB downloads would freeze the client.
+    const FILE_CAP = 200 * 1024 * 1024;
+    const TOTAL_CAP = 500 * 1024 * 1024;
     Toasts.show({ message: T("Ekler indiriliyor...", "Downloading attachments..."), id: Toasts.genId(), type: Toasts.Type.INFO });
-    const settled = await Promise.allSettled(items.map(async f => {
+    const zipped: Record<string, Uint8Array> = Object.create(null);
+    let bad = 0;
+    let total = 0;
+    for (const f of items) {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 60000);
         try {
             const res = await fetch(f.url, { signal: ctrl.signal });
             if (!res.ok) throw new Error(`download failed ${res.status}`);
             const buf = new Uint8Array(await res.arrayBuffer());
-            const name = cleanZipName(String(f?.filename ?? T("dosya", "file")));
-            return { name, buf };
+            if (!buf.length || buf.length > FILE_CAP || total + buf.length > TOTAL_CAP) {
+                bad++;
+                continue;
+            }
+            total += buf.length;
+            let name = cleanZipName(String(f?.filename ?? T("dosya", "file")));
+            if (zipped[name]) {
+                const dot = name.lastIndexOf(".");
+                const base = dot > 0 ? name.slice(0, dot) : name;
+                const ext = dot > 0 ? name.slice(dot) : "";
+                let n = 2;
+                while (zipped[`${base} (${n})${ext}`]) n++;
+                name = `${base} (${n})${ext}`;
+            }
+            zipped[name] = buf;
+        } catch {
+            bad++;
         } finally {
             clearTimeout(timer);
         }
-    }));
-    const zipped: Record<string, Uint8Array> = Object.create(null);
-    let bad = 0;
-    settled.forEach(r => {
-        if (r.status !== "fulfilled") {
-            bad++;
-            return;
-        }
-        let { name } = r.value;
-        if (zipped[name]) {
-            const dot = name.lastIndexOf(".");
-            const base = dot > 0 ? name.slice(0, dot) : name;
-            const ext = dot > 0 ? name.slice(dot) : "";
-            let n = 2;
-            while (zipped[`${base} (${n})${ext}`]) n++;
-            name = `${base} (${n})${ext}`;
-        }
-        zipped[name] = r.value.buf;
-    });
+    }
     if (!Object.keys(zipped).length) {
         Toasts.show({ message: T("Hiçbir ek inemedi", "No attachment downloaded"), id: Toasts.genId(), type: Toasts.Type.FAILURE });
         return;
@@ -455,7 +458,8 @@ function syncCameraBg() {
             uninstallCameraBg();
             return;
         }
-        installCameraBg(link, String((settings.store as any).videoFilterType ?? "png") === "mp4");
+        const ok = installCameraBg(link, String((settings.store as any).videoFilterType ?? "png") === "mp4");
+        if (!ok) log.warn("custom camera background: Discord internals not found, toggle stays on");
     } catch { /* ignore */ }
 }
 

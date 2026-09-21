@@ -429,13 +429,6 @@ export const settings = definePluginSettings({
         },
         hidden: () => isShut("misc")
     },
-    removeUpsell: {
-        get description() { return T("Profil düzenlemedeki Nitro reklamını gizle", "Hide the Nitro upsell in profile editing"); },
-        type: OptionType.BOOLEAN,
-        default: true,
-        restartNeeded: true,
-        hidden: () => isShut("misc")
-    },
     videoFilter: {
         get description() { return T("Özel kamera arka planı kullan (bağlantı + tür aşağıda)", "Use a custom camera background (link + type below)"); },
         type: OptionType.BOOLEAN,

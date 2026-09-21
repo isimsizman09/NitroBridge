@@ -23,6 +23,8 @@ export function findModuleByNeedles(needles: string[]): any {
     try {
         const factories = (wreq as any)?.m;
         if (!factories) return null;
+        let hits = 0;
+        let found: any = null;
         for (const id of Object.keys(factories)) {
             let code = "";
             try {
@@ -31,12 +33,22 @@ export function findModuleByNeedles(needles: string[]): any {
                 continue;
             }
             if (!needles.every(n => code.includes(n))) continue;
+            let mod: any = null;
             try {
-                return (wreq as any)(id);
+                mod = (wreq as any)(id);
             } catch {
                 continue;
             }
+            hits++;
+            if (hits > 1) {
+                try {
+                    console.warn("[Yabdp4Nitro] ambiguous module match, using first");
+                } catch { /* ignore */ }
+                break;
+            }
+            found = mod;
         }
+        return found;
     } catch { /* ignore */ }
     return null;
 }
