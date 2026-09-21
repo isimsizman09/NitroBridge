@@ -1119,13 +1119,18 @@ export default definePlugin({
 
     transformContent(content: any[]) {
         if (!settings.store.showAsEmoji) return content;
-        // Jumbo when the message is nothing but our emojis and whitespace.
+        // Jumbo when the message is nothing but our emojis and whitespace
+        // (Discord's own rule, capped at 30 like the original).
         let jumboable = content.length === 1;
         if (!jumboable) {
+            let fakes = 0;
             jumboable = content.length > 0 && content.every((n: any) => {
                 try {
                     const href = n?.props?.href;
-                    if (typeof href === "string" && EMOJI_LINK_RE.test(href)) return true;
+                    if (typeof href === "string" && EMOJI_LINK_RE.test(href)) {
+                        fakes++;
+                        return fakes <= 30;
+                    }
                     const kids = n?.props?.children ?? (n as any)?.content;
                     if (typeof kids === "string") return /^\s*$/.test(kids);
                     if (typeof n === "string") return /^\s*$/.test(n);
