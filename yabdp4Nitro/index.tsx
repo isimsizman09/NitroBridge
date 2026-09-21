@@ -116,8 +116,14 @@ const log = new Logger("Yabdp4Nitro");
 // Only Discord's own emoji CDN counts as a fake emoji.
 const EMOJI_LINK_RE = /https:\/\/cdn\.discordapp\.com\/emojis\/(\d+)\.(png|webp|gif|avif|jpg|jpeg)/;
 const EMOJI_PREFIX = "https://cdn.discordapp.com/emojis/";
-const EMOJI_MD_RE = /\[.*?\]\(https:\/\/cdn\.discordapp\.com\/emojis\/.*?\)/g;
+const EMOJI_MD_RE = /\[.*?\]\(<?https:\/\/cdn\.discordapp\.com\/emojis\/.*?>?\)/g;
 const CUSTOM_EMOJI_RE = /(?<!\\)<a?:\w+:(\d+)>/gi;
+
+// Angle-bracketed destinations suppress previews server-side (verified live);
+// the parser hands us the clean URL, but unwrap defensively anyway.
+function unwrapHref(href: string) {
+    return href.startsWith("<") && href.endsWith(">") ? href.slice(1, -1) : href;
+}
 
 // Clone keeping the class AND the hidden methods (Discord defines e.g.
 // hasFlag as a non-enumerable own property; a plain spread drops it and
@@ -151,7 +157,7 @@ function emojiIdOf(url: string | undefined): string | null {
 // All emoji link targets inside a message (suffix ignored).
 function emojiHrefs(content: string): string[] {
     try {
-        return content.match(EMOJI_MD_RE)?.map((l: string) => normLink(l.slice(l.indexOf("](") + 2, -1))) ?? [];
+        return content.match(EMOJI_MD_RE)?.map((l: string) => normLink(unwrapHref(l.slice(l.indexOf("](") + 2, -1)))) ?? [];
     } catch {
         return [];
     }
@@ -232,6 +238,11 @@ function withBoundary(text: string, pos: number, len: number, insert: string) {
     const left = (!text[pos - 1] || /\s/.test(text[pos - 1])) ? "" : " ";
     const right = (!text[pos + len] || /\s/.test(text[pos + len])) ? "" : " ";
     return `${left}${insert}${right}`;
+}
+
+// Bracketed destinations suppress previews server-side (verified live).
+function mdLink(label: string, url: string) {
+    return `[${label}](<${url}>)`;
 }
 
 function isAnimatedHref(href: string, id: string) {
@@ -1057,7 +1068,8 @@ export default definePlugin({
     shouldKeepEmojiLink(link: any) {
         if (!settings.store.showAsEmoji) return false;
         try {
-            return !!link?.target && EMOJI_LINK_RE.test(link.target);
+            const target = typeof link?.target === "string" ? unwrapHref(link.target) : link?.target;
+            return !!target && EMOJI_LINK_RE.test(target);
         } catch {
             return false;
         }
@@ -1067,7 +1079,7 @@ export default definePlugin({
         try {
             if (typeof content !== "string") return content;
             return content.replace(EMOJI_MD_RE, (link: string) => {
-                const href = link.slice(link.indexOf("](") + 2, -1);
+                const href = unwrapHref(link.slice(link.indexOf("](") + 2, -1));
                 const m = href.match(EMOJI_LINK_RE);
                 if (!m) return link;
                 const e = EmojiStore.getCustomEmojiById(m[1]) as Emoji | undefined;
@@ -1143,7 +1155,8 @@ export default definePlugin({
         const out: any[] = [];
         for (const node of content) {
             try {
-                const href = node?.props?.href;
+                const rawHref = node?.props?.href;
+                const href = typeof rawHref === "string" ? unwrapHref(rawHref) : rawHref;
                 const m = typeof href === "string" && href.match(EMOJI_LINK_RE);
                 if (m) {
                     const id = m[1];
@@ -1718,7 +1731,7 @@ export default definePlugin({
                     // Animated json stickers can't be file-ified: link them (left in the list, the server rejects).
                     if (st?.format_type === 3) {
                         (options as any).stickerIds = ((options as any).stickerIds as string[]).filter(s => s !== sid);
-                        stickerLinks.push(`[${st?.name ?? T("çıkartma", "sticker")}](${STICKER_PREFIX}${sid}.json)`);
+                        stickerLinks.push(mdLink(st?.name ?? T("çıkartma", "sticker"), `${STICKER_PREFIX}${sid}.json`));
                         continue;
                     }
                     if (st?.guild_id && st.guild_id === here) continue; // own server goes normally
@@ -1735,7 +1748,7 @@ export default definePlugin({
                     };
                     (options as any).stickerIds = ((options as any).stickerIds as string[]).filter(s => s !== sid);
                     if (canAttach) stickerJobs.push(item);
-                    else stickerLinks.push(`[${st?.name ?? T("çıkartma", "sticker")}](${item.url})`);
+                    else stickerLinks.push(mdLink(st?.name ?? T("çıkartma", "sticker"), item.url));
                 }
             }
 
@@ -1773,7 +1786,7 @@ export default definePlugin({
                         label: snd.name ?? T("ses", "sound")
                     };
                     if (canAttach) audioJobs.push(item);
-                    else audioLinks.push(`[${item.label}](${item.url})`);
+                    else audioLinks.push(mdLink(item.label, item.url));
                 }
             }
             if (!list.length && !stickerJobs.length && !stickerLinks.length && !audioJobs.length && !audioLinks.length) return { cancel: false };
@@ -1857,7 +1870,7 @@ export default definePlugin({
                     if (skipped.has(id) || !hasId(msg.content, id)) continue;
                     touched = true;
                     const url = `${emojiUrl(e, size)}&${i++}`;
-                    msg.content = swapId(msg.content, id, bare ? url : `[${e.name}](${url})`);
+                    msg.content = swapId(msg.content, id, bare ? `<${url}>` : `[${e.name}](<${url}>)`);
                 }
                 if (stickerLinks.length) msg.content = `${msg.content.trim()} ${stickerLinks.join(" ")}`.trim();
                 if (audioLinks.length) msg.content = `${msg.content.trim()} ${audioLinks.join(" ")}`.trim();
@@ -1877,7 +1890,7 @@ export default definePlugin({
                 msg.content = stripId(msg.content, id);
                 const item = { url: emojiUrl(e, size), filename: cleanFileName(e.name, extOf(e)), label: e.name };
                 // No file permission, or 10 files reached: fall back to a link.
-                if (!canAttach || jobs.length >= 10) links.push(`[${e.name}](${item.url}&${i++})`);
+                if (!canAttach || jobs.length >= 10) links.push(mdLink(e.name, `${item.url}&${i++}`));
                 else jobs.push(item);
             }
             if (!jobs.length && !links.length) return { cancel: false };
@@ -1885,7 +1898,7 @@ export default definePlugin({
             // Discord caps a message at 10 files; the rest become links.
             if (jobs.length > 10) {
                 const extra = jobs.splice(10);
-                for (const j of extra) links.push(`[${j.label}](${j.url})`);
+                for (const j of extra) links.push(mdLink(j.label, j.url));
             }
 
             const text = `${msg.content.trim()}${links.length ? " " + links.join(" ") : ""}`.trim();
@@ -1909,7 +1922,7 @@ export default definePlugin({
                         uploads.push(new CloudUpload({ file: r.value, isThumbnail: false, platform: 1 }, channelId));
                     } else {
                         log.warn("file fetch failed, falling back to link", jobs[k].url, r.reason);
-                        links.push(`[${jobs[k].label}](${jobs[k].url})`);
+                        links.push(mdLink(jobs[k].label, jobs[k].url));
                     }
                 });
                 if (uploads.length) {
