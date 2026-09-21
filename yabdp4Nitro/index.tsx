@@ -696,25 +696,22 @@ export default definePlugin({
                 ensureSharpener();
                 const ownerId = props?.stream?.ownerId as string | undefined;
                 if (!ownerId || !/^\d+$/.test(ownerId)) return;
-                const ControlItem = (Menu as any)?.MenuControlItem;
-                const SliderControl = (Menu as any)?.MenuSliderControl;
-                if (!ControlItem || !SliderControl) return;
+                const cur = getSharpen(ownerId);
+                const levels = [0, 25, 50, 75, 100];
                 children.push(
-                    <ControlItem
+                    <Menu.MenuItem
                         id="yabdp-sharpen"
-                        label={menuLabel(T("Netlik", "Sharpness"))}
-                        control={(cprops: any, ref: any) => (
-                            <SliderControl
-                                {...cprops}
-                                ref={ref}
-                                minValue={0}
-                                maxValue={100}
-                                value={getSharpen(ownerId)}
-                                onChange={(v: number) => setSharpen(ownerId, v)}
-                                renderValue={(v: number) => `${Math.round(v)}`}
+                        label={menuLabel(`${T("Netlik", "Sharpness")}: ${cur ? `%${cur}` : T("kapalı", "off")}`)}
+                    >
+                        {levels.map(v => (
+                            <Menu.MenuItem
+                                key={v}
+                                id={`yabdp-sharpen-${v}`}
+                                label={v ? `%${v}` : T("Kapalı", "Off")}
+                                action={() => setSharpen(ownerId, v)}
                             />
-                        )}
-                    />
+                        ))}
+                    </Menu.MenuItem>
                 );
             } catch { /* ignore */ }
         },

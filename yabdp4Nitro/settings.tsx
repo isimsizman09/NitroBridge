@@ -296,7 +296,7 @@ export const settings = definePluginSettings({
         hidden: () => isShut("stream")
     },
     sharpenStreams: {
-        get description() { return T("Yayınlara sağ-tık netlik kaydırıcısı ekle (kişi bazında)", "Add a right-click sharpness slider to streams (per user)"); },
+        get description() { return T("Yayınlara sağ-tık netlik menüsü ekle (kişi bazında, Kapalı/25/50/75/100)", "Add a right-click sharpness menu to streams (per user, Off/25/50/75/100)"); },
         type: OptionType.BOOLEAN,
         default: false,
         restartNeeded: true,
