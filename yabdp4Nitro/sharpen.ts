@@ -116,7 +116,13 @@ export function installSharpener(): boolean {
     uninstallSharpener();
     try {
         const found = findComponent(["backgroundKey", "onForceIdle", "renderBottomLeftControls"]);
-        if (!found) return false;
+        if (!found) {
+            if (!logged) {
+                logged = true;
+                log.warn("stream sharpener: overlay component not found (retry on menu open)");
+            }
+            return false;
+        }
         const { mod, key, fn: orig } = found;
         mod[key] = function (this: any, ...args: any[]) {
             const ret = orig.apply(this, args);
@@ -139,7 +145,7 @@ export function installSharpener(): boolean {
         installed = true;
         if (!logged) {
             logged = true;
-            log.info("stream sharpener installed");
+            log.info(`stream sharpener installed on ${String(key).slice(0, 40)}`);
         }
         return true;
     } catch {
