@@ -34,7 +34,7 @@ import { T } from "./lang";
 import { badgesFor, bannerOf, clearFpsOwned, clearRevealCache, createFpsOwned, decorOf, effectOf, extraFpsValues, FpsOwned, frameOf, hasHiddenMark, photoOf, plateOf, styleOf, themeColorsOf } from "./profile";
 import { installGoLiveUpsell, uninstallGoLiveUpsell } from "./runtime";
 import { ProfileSettingsUI, settings } from "./settings";
-import { ensureSharpener,getSharpen, installSharpener, setSharpen, uninstallSharpener } from "./sharpen";
+import { diagnoseTiles, ensureSharpener, getSharpen, installSharpener, isSharpenerInstalled, logTileShapesOnce, setSharpen, uninstallSharpener } from "./sharpen";
 
 // Menu header, so it's clear which plugin owns the item (like the original).
 function menuLabel(text: string) {
@@ -696,23 +696,80 @@ export default definePlugin({
                 ensureSharpener();
                 const ownerId = props?.stream?.ownerId as string | undefined;
                 if (!ownerId || !/^\d+$/.test(ownerId)) return;
-                const cur = getSharpen(ownerId);
-                const levels = [0, 25, 50, 75, 100];
+                if (!isSharpenerInstalled()) {
+                    children.push(
+                        <Menu.MenuItem
+                            id="yabdp-sharpen-retry"
+                            label={menuLabel(T("Netlik motoru kurulamadı — tekrar dene", "Sharpness engine missing — retry"))}
+                            action={() => {
+                                const ok = installSharpener();
+                                Toasts.show({
+                                    message: ok
+                                        ? T("Netlik motoru kuruldu", "Sharpness engine installed")
+                                        : T("Kurulum başarısız — pencereyi kapatıp açmayı dene", "Install failed — try reopening the view"),
+                                    id: Toasts.genId(),
+                                    type: ok ? Toasts.Type.SUCCESS : Toasts.Type.FAILURE,
+                                });
+                            }}
+                        />
+                    );
+                }
+                let diag: { videos: number; items: { userId: string | null; pct: number; marked: boolean; }[]; } | null = null;
+                try {
+                    diag = diagnoseTiles();
+                } catch { /* ignore */ }
+                const liveHere = !!diag?.items.some(i => i.userId === ownerId && i.marked);
                 children.push(
-                    <Menu.MenuItem
+                    <Menu.MenuControlItem
                         id="yabdp-sharpen"
-                        label={menuLabel(`${T("Netlik", "Sharpness")}: ${cur ? `%${cur}` : T("kapalı", "off")}`)}
-                    >
-                        {levels.map(v => (
-                            <Menu.MenuItem
-                                key={v}
-                                id={`yabdp-sharpen-${v}`}
-                                label={v ? `%${v}` : T("Kapalı", "Off")}
-                                action={() => setSharpen(ownerId, v)}
+                        label={liveHere
+                            ? `${T("Netlik", "Sharpness")} ✓ (${T("kutuda aktif", "live on tile")})`
+                            : T("Netlik", "Sharpness")}
+                        control={(cprops, ref) => (
+                            <Menu.MenuSliderControl
+                                ref={ref}
+                                {...cprops}
+                                minValue={0}
+                                maxValue={100}
+                                value={getSharpen(ownerId)}
+                                onChange={(v: number) => setSharpen(ownerId, v)}
+                                renderValue={(v: number) => (v ? `%${Math.round(v)}` : T("Kapalı", "Off"))}
                             />
-                        ))}
-                    </Menu.MenuItem>
+                        )}
+                    />
                 );
+                try {
+                    const d = diag ?? diagnoseTiles();
+                    const resolved = d.items.filter(i => i.userId);
+                    const unknown = d.items.length - resolved.length;
+                    if (unknown > 0) {
+                        try {
+                            logTileShapesOnce();
+                        } catch { /* ignore */ }
+                    }
+                    children.push(
+                        <Menu.MenuItem
+                            id="yabdp-sharpen-diag"
+                            label={menuLabel(
+                                d.videos === 0
+                                    ? T("Netlik durumu: ekranda video yok", "Sharpness status: no video on screen")
+                                    : resolved.length === 0
+                                        ? T(`Netlik durumu: ${d.videos} video, kimlik yok`, `Sharpness status: ${d.videos} video(s), no id`)
+                                        : T(`Netlik durumu: ${resolved.length} kutu tanındı`, `Sharpness status: ${resolved.length} tile(s) seen`)
+                            )}
+                        >
+                            {d.items.slice(0, 6).map((it, n) => (
+                                <Menu.MenuItem
+                                    key={n}
+                                    id={`yabdp-sharpen-diag-${n}`}
+                                    label={it.userId
+                                        ? `${it.userId.slice(-4)}…: %${it.pct}${it.marked ? " ✓" : ""}`
+                                        : T("kimliksiz video", "video without id")}
+                                />
+                            ))}
+                        </Menu.MenuItem>
+                    );
+                } catch { /* ignore */ }
             } catch { /* ignore */ }
         },
         "message": (children: any[], props: any) => {

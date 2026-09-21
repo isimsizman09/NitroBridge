@@ -719,7 +719,7 @@ export function ProfileSettingsUI() {
                                     <div
                                         key={p.c1 + p.c2}
                                         onClick={() => { setC1(p.c1); setC2(p.c2); }}
-                                        title={p.name}
+                                        title={T(p.tr, p.en)}
                                         style={{
                                             width: 78,
                                             padding: 6,
@@ -731,7 +731,7 @@ export function ProfileSettingsUI() {
                                         }}
                                     >
                                         <div style={{ width: 56, height: 56, margin: "0 auto", borderRadius: 10, background: `linear-gradient(135deg, #${p.c1}, #${p.c2})` }} />
-                                        <div style={{ fontSize: 11, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                                        <div style={{ fontSize: 11, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{T(p.tr, p.en)}</div>
                                     </div>
                                 );
                             })}

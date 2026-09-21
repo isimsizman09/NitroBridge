@@ -39,7 +39,8 @@ export interface PlatePreset {
 export interface ThemePreset {
     c1: string;
     c2: string;
-    name: string;
+    tr: string;
+    en: string;
 }
 
 // Live preview for any typed-in ID (decorations, frames, nameplates).
@@ -100,10 +101,10 @@ export const PLATE_PALETTES: string[] = [
 ];
 
 export const THEME_PRESETS: ThemePreset[] = [
-    { c1: "5865f2", c2: "eb459e", name: "Blurple" },
-    { c1: "ff9a3c", c2: "ff2e63", name: "Sunset" },
-    { c1: "00c6ff", c2: "0072ff", name: "Ocean" },
-    { c1: "00ffa3", c2: "00b8ff", name: "Mint" },
-    { c1: "a044ff", c2: "6a5cff", name: "Grape" },
-    { c1: "ff512f", c2: "dd2476", name: "Ember" },
+    { c1: "5865f2", c2: "eb459e", tr: "Blurple", en: "Blurple" },
+    { c1: "ff9a3c", c2: "ff2e63", tr: "Gün Batımı", en: "Sunset" },
+    { c1: "00c6ff", c2: "0072ff", tr: "Okyanus", en: "Ocean" },
+    { c1: "00ffa3", c2: "00b8ff", tr: "Nane", en: "Mint" },
+    { c1: "a044ff", c2: "6a5cff", tr: "Üzüm", en: "Grape" },
+    { c1: "ff512f", c2: "dd2476", tr: "Kor", en: "Ember" },
 ];
