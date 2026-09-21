@@ -240,11 +240,6 @@ function withBoundary(text: string, pos: number, len: number, insert: string) {
     return `${left}${insert}${right}`;
 }
 
-// Bracketed destinations suppress previews server-side (verified live).
-function mdLink(label: string, url: string) {
-    return `[${label}](<${url}>)`;
-}
-
 function isAnimatedHref(href: string, id: string) {
     if (href.includes("animated=true")) return true;
     const m = href.match(EMOJI_LINK_RE);
@@ -1731,7 +1726,7 @@ export default definePlugin({
                     // Animated json stickers can't be file-ified: link them (left in the list, the server rejects).
                     if (st?.format_type === 3) {
                         (options as any).stickerIds = ((options as any).stickerIds as string[]).filter(s => s !== sid);
-                        stickerLinks.push(mdLink(st?.name ?? T("çıkartma", "sticker"), `${STICKER_PREFIX}${sid}.json`));
+                        stickerLinks.push(`[${st?.name ?? T("çıkartma", "sticker")}](${STICKER_PREFIX}${sid}.json)`);
                         continue;
                     }
                     if (st?.guild_id && st.guild_id === here) continue; // own server goes normally
@@ -1748,7 +1743,7 @@ export default definePlugin({
                     };
                     (options as any).stickerIds = ((options as any).stickerIds as string[]).filter(s => s !== sid);
                     if (canAttach) stickerJobs.push(item);
-                    else stickerLinks.push(mdLink(st?.name ?? T("çıkartma", "sticker"), item.url));
+                    else stickerLinks.push(`[${st?.name ?? T("çıkartma", "sticker")}](${item.url})`);
                 }
             }
 
@@ -1786,7 +1781,7 @@ export default definePlugin({
                         label: snd.name ?? T("ses", "sound")
                     };
                     if (canAttach) audioJobs.push(item);
-                    else audioLinks.push(mdLink(item.label, item.url));
+                    else audioLinks.push(`[${item.label}](${item.url})`);
                 }
             }
             if (!list.length && !stickerJobs.length && !stickerLinks.length && !audioJobs.length && !audioLinks.length) return { cancel: false };
@@ -1870,7 +1865,7 @@ export default definePlugin({
                     if (skipped.has(id) || !hasId(msg.content, id)) continue;
                     touched = true;
                     const url = `${emojiUrl(e, size)}&${i++}`;
-                    msg.content = swapId(msg.content, id, bare ? `<${url}>` : `[${e.name}](<${url}>)`);
+                    msg.content = swapId(msg.content, id, bare ? url : `[${e.name}](${url})`);
                 }
                 if (stickerLinks.length) msg.content = `${msg.content.trim()} ${stickerLinks.join(" ")}`.trim();
                 if (audioLinks.length) msg.content = `${msg.content.trim()} ${audioLinks.join(" ")}`.trim();
@@ -1890,7 +1885,7 @@ export default definePlugin({
                 msg.content = stripId(msg.content, id);
                 const item = { url: emojiUrl(e, size), filename: cleanFileName(e.name, extOf(e)), label: e.name };
                 // No file permission, or 10 files reached: fall back to a link.
-                if (!canAttach || jobs.length >= 10) links.push(mdLink(e.name, `${item.url}&${i++}`));
+                if (!canAttach || jobs.length >= 10) links.push(`[${e.name}](${item.url}&${i++})`);
                 else jobs.push(item);
             }
             if (!jobs.length && !links.length) return { cancel: false };
@@ -1898,7 +1893,7 @@ export default definePlugin({
             // Discord caps a message at 10 files; the rest become links.
             if (jobs.length > 10) {
                 const extra = jobs.splice(10);
-                for (const j of extra) links.push(mdLink(j.label, j.url));
+                for (const j of extra) links.push(`[${j.label}](${j.url})`);
             }
 
             const text = `${msg.content.trim()}${links.length ? " " + links.join(" ") : ""}`.trim();
@@ -1922,7 +1917,7 @@ export default definePlugin({
                         uploads.push(new CloudUpload({ file: r.value, isThumbnail: false, platform: 1 }, channelId));
                     } else {
                         log.warn("file fetch failed, falling back to link", jobs[k].url, r.reason);
-                        links.push(mdLink(jobs[k].label, jobs[k].url));
+                        links.push(`[${jobs[k].label}](${jobs[k].url})`);
                     }
                 });
                 if (uploads.length) {
