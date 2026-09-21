@@ -14,3 +14,11 @@
 [class*="upsellRibbonContainer"] {
     display: none !important;
 }
+
+/* Link previews of our fake emojis (immune to the data-layer race).
+ * Hides only the preview box carrying our emoji address; file attachments
+ * (separate boxes) are untouched. No hashed classes: the message id prefix
+ * plus the address fragment stay the same every build. */
+[id^="message-accessories-"] div:has(> a[href*="cdn.discordapp.com/emojis/"]) {
+    display: none !important;
+}

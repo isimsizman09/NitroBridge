@@ -494,7 +494,11 @@ function stripMessageEmbeds(msg: any) {
             if (!id) return true;
             return hasContent ? !wanted.has(id) : false;
         });
-        if (kept.length !== msg.embeds.length) msg.embeds = kept;
+        if (kept.length !== msg.embeds.length) {
+            try {
+                msg.embeds = kept;
+            } catch { /* ignore */ }
+        }
     } catch { /* ignore */ }
 }
 
