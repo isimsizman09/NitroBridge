@@ -4,6 +4,9 @@
  * Inspired by YABDP4Nitro by Riolubruh (OSL-3.0, https://github.com/riolubruh/YABDP4Nitro).
  * Licensed under the Open Software License version 3.0 (OSL-3.0).
  * See LICENSE file for more information.
+ *
+ * NOTE: intentionally not the Vencord GPL header (this is OSL-3.0 code);
+ * run eslint WITHOUT --fix on this folder.
  */
 
 // Yabdp4Nitro — profile tricks, 3y3 hidden-text decoding (clean-room rewrite).
@@ -204,6 +207,29 @@ export function extraFpsValues(custom: unknown) {
     const c = Math.round(Number(custom));
     if (Number.isFinite(c) && c >= 5 && c <= 240 && !out.includes(c)) out.push(c);
     return out.sort((a, b) => a - b);
+}
+
+// Ownership ledger for runtime-added FPS entries. Only references/keys
+// recorded here may ever be removed again — native or patch-baked entries
+// (even with the same numeric value) are never touched.
+export interface FpsOwned {
+    presets: any[];
+    enumEntries: [string, unknown][];
+    listValues: number[];
+    labeled: any[];
+    custom: number;
+}
+
+export function createFpsOwned(): FpsOwned {
+    return { presets: [], enumEntries: [], listValues: [], labeled: [], custom: -1 };
+}
+
+export function clearFpsOwned(o: FpsOwned) {
+    o.presets.length = 0;
+    o.enumEntries.length = 0;
+    o.listValues.length = 0;
+    o.labeled.length = 0;
+    o.custom = -1;
 }
 
 // Plugin badges (only fellow plugin users see them).

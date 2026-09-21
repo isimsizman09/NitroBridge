@@ -85,6 +85,43 @@ function tryResolve(mod) {
         T("tag", (() => { const t = c.buildClipTag("1", "f.mp4", 100, 1700000000000, 2); return t.createdAt === 1700000000000 && typeof t.id === "bigint"; })());
         T("photo", p.photoOf("x" + p.makePhotoCode("AbC12")) === "https://i.imgur.com/AbC12.gif");
         T("fps", JSON.stringify(p.extraFpsValues(-1)) === "[90,120,144,180,240]");
+        T("seq-marker", c.hasSeqMarker("https://cdn.discordapp.com/emojis/1.webp?a=1&0") === true
+            && c.hasSeqMarker("https://images-ext-1.discordapp.net/external/x/%3Fsize%3D64%260/https/cdn.discordapp.com/emojis/1.webp?format=webp") === true
+            && c.hasSeqMarker("https://cdn.discordapp.com/emojis/1.webp?size=64") === false
+            && c.hasSeqMarker(undefined) === false);
+        // FPS ownership ledger: only recorded entries are ever removed.
+        T("fps-ownership", (() => {
+            const o = p.createFpsOwned();
+            const native = [{ resolution: 0, fps: 60, quality: 1 }];
+            const ZV = [...native];
+            const want = 60;
+            // native 60 exists -> nothing recorded
+            if (!ZV.some(x => x.fps === want)) o.presets.push({ fps: want });
+            const removed = [];
+            for (const q of o.presets) { const at = ZV.indexOf(q); if (at >= 0) removed.push(...ZV.splice(at, 1)); }
+            p.clearFpsOwned(o);
+            return ZV.length === 1 && ZV[0] === native[0] && removed.length === 0;
+        })());
+        T("fps-owned-removal", (() => {
+            const o = p.createFpsOwned();
+            const ZV = [{ resolution: 0, fps: 60, quality: 1 }];
+            const mine = { resolution: 0, fps: 75, quality: 1 };
+            ZV.push(mine); o.presets.push(mine);
+            for (const q of [...o.presets]) { const at = ZV.indexOf(q); if (at >= 0) ZV.splice(at, 1); }
+            p.clearFpsOwned(o);
+            return ZV.length === 1 && ZV[0].fps === 60 && o.presets.length === 0 && o.custom === -1;
+        })());
+        // Malformed profile inputs never throw and unsigned stays null.
+        T("fuzz", (() => {
+            const bad = ["", "hello", "A".repeat(5000), "fx123", "n{1,2} S{1,2}", "P{}", "B{http://e.com/x}", "S{}", "S{a,b}", "[#gggggg,#1]", "B{" + "x".repeat(300) + "}", "ftp://x/y", "\u{1F600} test"];
+            for (const s of bad) {
+                p.themeColorsOf(s); p.effectOf(s); p.frameOf(s); p.decorOf(s);
+                p.plateOf(s); p.styleOf(s); p.bannerOf(s); p.photoOf(s);
+                p.hasHiddenMark(s); p.extractImgurId(s);
+            }
+            return p.themeColorsOf(" " + p.hidePlain("[#5865f2,#eb459e]")) === null
+                && JSON.stringify(p.themeColorsOf("x" + p.makeThemeCode("5865f2", "eb459e"))) === "[5793266,15418782]";
+        })());
     } finally {
         fs.rmSync(tmp, { recursive: true, force: true });
         for (const f of [".nitrobridge-clips.ts.cjs", ".nitrobridge-profile.ts.cjs"]) {

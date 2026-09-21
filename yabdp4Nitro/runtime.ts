@@ -4,6 +4,9 @@
  * Inspired by YABDP4Nitro by Riolubruh (OSL-3.0, https://github.com/riolubruh/YABDP4Nitro).
  * Licensed under the Open Software License version 3.0 (OSL-3.0).
  * See LICENSE file for more information.
+ *
+ * NOTE: intentionally not the Vencord GPL header (this is OSL-3.0 code);
+ * run eslint WITHOUT --fix on this folder.
  */
 
 // Late runtime patches (clean-room rewrite).

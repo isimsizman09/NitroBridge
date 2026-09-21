@@ -4,6 +4,9 @@
  * Inspired by YABDP4Nitro by Riolubruh (OSL-3.0, https://github.com/riolubruh/YABDP4Nitro).
  * Licensed under the Open Software License version 3.0 (OSL-3.0).
  * See LICENSE file for more information.
+ *
+ * NOTE: intentionally not the Vencord GPL header (this is OSL-3.0 code);
+ * run eslint WITHOUT --fix on this folder.
  */
 
 // Yabdp4Nitro — clean-room port of BetterDiscord's YABDP4Nitro for Vencord.
@@ -24,11 +27,11 @@ import { ChannelStore, ContextMenuApi, EmojiStore, FluxDispatcher, Menu, Parser,
 import { applyPalette, GIFEncoder, quantize } from "gifenc";
 
 import { installCameraBg, uninstallCameraBg } from "./camera";
-import { decideClip, transcodeAudio, transcodeVideo, transcodeZip } from "./clips";
+import { decideClip, hasSeqMarker, transcodeAudio, transcodeVideo, transcodeZip } from "./clips";
 import { ensureFFmpeg, unloadFFmpeg } from "./ffmpeg";
 import { isIgnored, toggleIgnore } from "./ignores";
 import { T } from "./lang";
-import { badgesFor, bannerOf, clearRevealCache, decorOf, effectOf, extraFpsValues, frameOf, hasHiddenMark, photoOf, plateOf, styleOf, themeColorsOf } from "./profile";
+import { badgesFor, bannerOf, clearFpsOwned, clearRevealCache, createFpsOwned, decorOf, effectOf, extraFpsValues, FpsOwned, frameOf, hasHiddenMark, photoOf, plateOf, styleOf, themeColorsOf } from "./profile";
 import { installGoLiveUpsell, uninstallGoLiveUpsell } from "./runtime";
 import { ProfileSettingsUI, settings } from "./settings";
 import { ensureSharpener,getSharpen, installSharpener, setSharpen, uninstallSharpener } from "./sharpen";
@@ -50,8 +53,40 @@ async function downloadAttachments(files: any[], zipName: string) {
         return;
     }
     // One at a time with caps: parallel multi-GB downloads would freeze the client.
+    // Bodies stream with a running cap so an oversized file is cut before buffering.
     const FILE_CAP = 200 * 1024 * 1024;
     const TOTAL_CAP = 500 * 1024 * 1024;
+    async function fetchCapped(url: string, cap: number, ctrl: AbortController): Promise<Uint8Array> {
+        const res = await fetch(url, { signal: ctrl.signal });
+        if (!res.ok) throw new Error(`download failed ${res.status}`);
+        const announced = Number(res.headers.get("content-length") ?? 0);
+        if (announced > cap) {
+            try { ctrl.abort(); } catch { /* ignore */ }
+            throw new Error("file too big");
+        }
+        if (!res.body?.getReader) return new Uint8Array(await res.arrayBuffer());
+        const reader = res.body.getReader();
+        const chunks: Uint8Array[] = [];
+        let total = 0;
+        try {
+            for (;;) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                total += value.length;
+                if (total > cap) throw new Error("file too big");
+                chunks.push(value);
+            }
+        } finally {
+            try { reader.releaseLock(); } catch { /* ignore */ }
+        }
+        const out = new Uint8Array(total);
+        let at = 0;
+        for (const c of chunks) {
+            out.set(c, at);
+            at += c.length;
+        }
+        return out;
+    }
     Toasts.show({ message: T("Ekler indiriliyor...", "Downloading attachments..."), id: Toasts.genId(), type: Toasts.Type.INFO });
     const zipped: Record<string, Uint8Array> = Object.create(null);
     let bad = 0;
@@ -60,10 +95,8 @@ async function downloadAttachments(files: any[], zipName: string) {
         const ctrl = new AbortController();
         const timer = setTimeout(() => ctrl.abort(), 60000);
         try {
-            const res = await fetch(f.url, { signal: ctrl.signal });
-            if (!res.ok) throw new Error(`download failed ${res.status}`);
-            const buf = new Uint8Array(await res.arrayBuffer());
-            if (!buf.length || buf.length > FILE_CAP || total + buf.length > TOTAL_CAP) {
+            const buf = await fetchCapped(f.url, FILE_CAP, ctrl);
+            if (!buf.length || total + buf.length > TOTAL_CAP) {
                 bad++;
                 continue;
             }
@@ -360,37 +393,42 @@ function userpfpUrl(userId: string | undefined): string | undefined {
 // updated from settings after that (no restart needed).
 let fpsListRef: number[] | null = null;
 let fpsLabeledRef: any[] | null = null;
-// The custom value we added (base values stay untouched).
-let addedCustomFps = -1;
+// Ledger of entries THIS plugin added at runtime (never native/baked ones).
+const fpsOwned: FpsOwned = createFpsOwned();
 // The preset store, resolved once then reused.
 let streamConstsRef: any = null;
 
-// Remove a runtime-added custom FPS from the lists.
-// Base values baked in at patch time (15/30/60) stay.
+// Remove only entries recorded in the ownership ledger.
+// Native and patch-baked entries stay, even with equal numeric values.
 // Runs both on setting changes and on plugin stop.
 function removeRuntimeFps() {
     try {
-        const v = addedCustomFps;
-        if (v <= 0) return;
         const SC = streamConstsRef;
         if (SC?.ZV && Array.isArray(SC.ZV)) {
-            for (let i = SC.ZV.length - 1; i >= 0; i--) {
-                if (SC.ZV[i]?.fps === v) SC.ZV.splice(i, 1);
+            for (const p of fpsOwned.presets) {
+                const at = SC.ZV.indexOf(p);
+                if (at >= 0) SC.ZV.splice(at, 1);
             }
-            delete SC.kn?.[`FPS_${v}`];
-            delete SC.kn?.[v];
+            for (const [k, v] of fpsOwned.enumEntries) {
+                try {
+                    if (SC.kn?.[k] === v) delete SC.kn[k];
+                } catch { /* ignore */ }
+            }
         }
         if (fpsListRef) {
-            const at = fpsListRef.indexOf(v);
-            if (at >= 0) fpsListRef.splice(at, 1);
+            for (const v of fpsOwned.listValues) {
+                const at = fpsListRef.indexOf(v);
+                if (at >= 0) fpsListRef.splice(at, 1);
+            }
         }
         if (fpsLabeledRef) {
-            for (let i = fpsLabeledRef.length - 1; i >= 0; i--) {
-                if (fpsLabeledRef[i]?.value === v) fpsLabeledRef.splice(i, 1);
+            for (const o of fpsOwned.labeled) {
+                const at = fpsLabeledRef.indexOf(o);
+                if (at >= 0) fpsLabeledRef.splice(at, 1);
             }
         }
     } catch { /* ignore */ }
-    addedCustomFps = -1;
+    clearFpsOwned(fpsOwned);
 }
 
 // Write the configured custom FPS into the live lists (enum + presets + menus).
@@ -399,7 +437,7 @@ function syncCustomFps() {
         if (!settings.store.streamUnlock) return;
         const c = Math.round(Number(settings.store.customFps));
         const want = Number.isFinite(c) && c >= 5 && c <= 240 ? c : -1;
-        if (want === addedCustomFps) return;
+        if (want === fpsOwned.custom) return;
         removeRuntimeFps();
         let ok = false;
         // 1) preset + enum store (main bundle, always loaded)
@@ -412,10 +450,23 @@ function syncCustomFps() {
             if (!SC?.ZV || !Array.isArray(SC.ZV) || !SC?.kn) throw new Error("store missing");
             if (want > 0 && !SC.ZV.some((p: any) => p?.fps === want)) {
                 const q = SC.ZV.find((p: any) => p?.fps === 60)?.quality;
-                SC.ZV.push({ resolution: 0, fps: want, quality: q });
-                for (const r of [720, 1080, 1440]) SC.ZV.push({ resolution: r, fps: want, quality: q });
-                SC.kn[`FPS_${want}`] = want;
-                SC.kn[want] = `FPS_${want}`;
+                const made = [
+                    { resolution: 0, fps: want, quality: q },
+                    ...[720, 1080, 1440].map(r => ({ resolution: r, fps: want, quality: q }))
+                ];
+                for (const p of made) {
+                    SC.ZV.push(p);
+                    fpsOwned.presets.push(p);
+                }
+                const k1 = `FPS_${want}`;
+                if (!(k1 in SC.kn)) {
+                    SC.kn[k1] = want;
+                    fpsOwned.enumEntries.push([k1, want]);
+                }
+                if (!(want in SC.kn)) {
+                    SC.kn[want] = k1;
+                    fpsOwned.enumEntries.push([String(want), k1]);
+                }
             }
             ok = true;
         } catch (err) {
@@ -424,23 +475,28 @@ function syncCustomFps() {
         // 2) open menu lists (if the lazy chunk loaded)
         try {
             if (fpsListRef) {
-                if (want > 0 && !fpsListRef.includes(want)) fpsListRef.push(want);
+                if (want > 0 && !fpsListRef.includes(want)) {
+                    fpsListRef.push(want);
+                    fpsOwned.listValues.push(want);
+                }
             }
             if (fpsLabeledRef) {
                 if (want > 0 && !fpsLabeledRef.some((o: any) => o?.value === want)) {
-                    fpsLabeledRef.push({
+                    const entry = {
                         value: want,
                         get label() {
                             return `${want} FPS`;
                         }
-                    });
+                    };
+                    fpsLabeledRef.push(entry);
+                    fpsOwned.labeled.push(entry);
                 }
             }
         } catch (err) {
             log.warn("fps menu sync failed", err);
             ok = false;
         }
-        if (ok) addedCustomFps = want;
+        if (ok) fpsOwned.custom = want;
     } catch (err) {
         log.warn("fps sync skipped", err);
     }
@@ -498,11 +554,14 @@ function stripMessageEmbeds(msg: any) {
             if (!wanted.size) return;
         }
         // Previews may come proxied (media host), so match by emoji id anywhere in the URL.
-        // Update events often carry no content: then any cdn-emoji preview goes (only we make those links).
+        // Update events often carry no content: then only previews with OUR
+        // sequence marker go (foreign raw pastes stay untouched).
         const kept = msg.embeds.filter((e: any) => {
+            const raw = e?.url ?? e?.image?.url;
             const id = emojiIdOf(e?.url) ?? emojiIdOf(e?.image?.url);
             if (!id) return true;
-            return hasContent ? !wanted.has(id) : false;
+            if (hasContent) return !wanted.has(id);
+            return !hasSeqMarker(raw);
         });
         if (kept.length !== msg.embeds.length) {
             try {

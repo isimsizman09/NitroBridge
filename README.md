@@ -120,6 +120,20 @@ Restart Discord PTB (or press `Ctrl+R`), open Settings → Vencord → Plugins, 
 - Fake profile codes only render for people running this (or a compatible 3y3) plugin.
 - ZipClips open with 7-Zip/WinRAR after removing the trailing `.mp4` (Explorer's built-in zip cannot open them).
 
+## Network & privacy
+
+No telemetry, no accounts, no tokens — the plugin never sends your data anywhere. It only downloads:
+
+| Source | What for | Safety |
+|---|---|---|
+| `raw.githubusercontent.com/riolubruh/YABDP4Nitro/<commit>/ffmpeg/*` | FFmpeg binaries | Commit-pinned + SHA-256 checked, fail-closed |
+| `cdn.discordapp.com`, `media.discordapp.net` | Emoji/sticker/sound re-uploads | 15s timeout, 8MB cap, MIME-checked |
+| `i.imgur.com` | Banner/photo/decoration images you encoded | Hash charset + https enforced |
+| `usrbg.is-hardly.online`, UserPFP data | Banner/photo fallbacks | Shape-validated, skipped on failure |
+| Discord collectibles/shop images | Settings preview gallery | Render-only, broken tiles hidden |
+
+Hosts see your IP when fetching (normal web behavior). Nothing leaves your machine otherwise.
+
 ## Layout
 
 ```
