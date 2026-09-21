@@ -1748,6 +1748,19 @@ export default definePlugin({
             }
 
             const list = msg.validNonShortcutEmojis ?? [];
+            // Fallback: if Discord ever stops providing the list, derive targets
+            // from raw codes in the text (same store lookup, same skip rules below).
+            let emojiList: Emoji[] = Array.isArray(list) ? [...list] : [];
+            if (!emojiList.length && typeof msg.content === "string") {
+                CUSTOM_EMOJI_RE.lastIndex = 0;
+                const ids = new Set<string>();
+                let m: RegExpExecArray | null;
+                while ((m = CUSTOM_EMOJI_RE.exec(msg.content)) !== null) {
+                    if (m[1]) ids.add(m[1]);
+                }
+                CUSTOM_EMOJI_RE.lastIndex = 0;
+                emojiList = [...ids].map(id => EmojiStore.getCustomEmojiById(id)).filter((e): e is Emoji => !!e);
+            }
 
             // Soundmojis (<sound:..:..>) go as audio files.
             const audioJobs: { url: string; filename: string; label: string }[] = [];
@@ -1784,7 +1797,7 @@ export default definePlugin({
                     else audioLinks.push(`[${item.label}](${item.url})`);
                 }
             }
-            if (!list.length && !stickerJobs.length && !stickerLinks.length && !audioJobs.length && !audioLinks.length) return { cancel: false };
+            if (!emojiList.length && !stickerJobs.length && !stickerLinks.length && !audioJobs.length && !audioLinks.length) return { cancel: false };
             // Our own resends carry no raw emoji codes; nothing to do, don't touch.
             CUSTOM_EMOJI_RE.lastIndex = 0;
             const hasRaw = CUSTOM_EMOJI_RE.test(msg.content);
@@ -1796,7 +1809,7 @@ export default definePlugin({
             // Offsets are recomputed fresh every step (no drift).
             const seen = new Set<string>();
             const targets: Emoji[] = [];
-            for (const e of list as Emoji[]) {
+            for (const e of emojiList) {
                 const id = String(e.id ?? "");
                 if (!/^\d+$/.test(id) || skipEmoji(e, channelId)) continue;
                 if (seen.has(id)) continue;
