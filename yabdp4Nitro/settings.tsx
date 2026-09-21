@@ -19,6 +19,15 @@ import type { ReactNode } from "react";
 
 import { T } from "./lang";
 import {
+    DECOR_PRESETS,
+    EFFECT_PRESETS,
+    extractSkuId,
+    PLATE_PALETTES,
+    PLATE_PRESETS,
+    shopStaticUrl,
+    THEME_PRESETS,
+} from "./presets";
+import {
     extractImgurId,
     makeBannerCode,
     makeDecorCode,
@@ -529,6 +538,95 @@ const isDigits = (v: string) => /^\d{1,32}$/.test(v.trim());
 const isHex = (v: string) => /^[0-9a-fA-F]{1,6}$/.test(v.trim().replace("#", ""));
 const isToken = (v: string) => /^[\w-]{1,32}$/.test(v.trim());
 
+// ---- Ready-made number galleries (preview + pick). UI only: they just
+// fill the text boxes above them. Code generation is untouched. ----
+
+function GalleryShell({ open, onToggle, children }: { open: boolean; onToggle: () => void; children: ReactNode; }) {
+    return (
+        <div style={{ flexBasis: "100%", marginTop: 2 }}>
+            <div onClick={onToggle} style={{ cursor: "pointer" }}>
+                <Forms.FormText>
+                    {open ? "▾" : "▸"} {T("Hazır numaralar (önizlemeli) — seçmek için dokun", "Ready-made IDs (with previews) — tap to pick")}
+                </Forms.FormText>
+            </div>
+            {open && (
+                <div>
+                    <Forms.FormText>
+                        {T(
+                            "Numaraları Discord Mağaza'daki ürün bağlantılarında da bulabilirsin — bağlantının tamamını kutuya yapıştırman yeterli, numara kendi ayıklanır.",
+                            "You can also find IDs in Discord Shop product links — just paste the whole link into the box, the number is extracted for you."
+                        )}
+                    </Forms.FormText>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginTop: 8 }}>{children}</div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+function PresetTile({ img, name, sku, selected, onPick }: { img: string; name: string; sku: string; selected: boolean; onPick: () => void; }) {
+    const [broken, setBroken] = useState(false);
+    return (
+        <div
+            onClick={onPick}
+            title={`${name} — ${sku}`}
+            style={{
+                width: 78,
+                padding: 6,
+                borderRadius: 10,
+                cursor: "pointer",
+                textAlign: "center",
+                border: selected ? "2px solid #5865f2" : "2px solid transparent",
+                background: selected ? "rgba(88,101,242,0.12)" : "transparent",
+            }}
+        >
+            {broken ? (
+                <div style={{ width: 56, height: 56, margin: "0 auto", borderRadius: 10, background: "rgba(128,128,128,0.2)" }} />
+            ) : (
+                <img
+                    src={img}
+                    alt={name}
+                    width={56}
+                    height={56}
+                    loading="lazy"
+                    onError={() => setBroken(true)}
+                    style={{ borderRadius: 10, objectFit: "cover", display: "block", margin: "0 auto" }}
+                />
+            )}
+            <div style={{ fontSize: 11, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</div>
+        </div>
+    );
+}
+
+// Live preview of whatever number is currently typed (decorations,
+// frames, nameplates). If the number is unknown the image hides itself
+// and a quiet note remains — nothing breaks.
+function SkuPreview({ sku }: { sku: string; }) {
+    const [broken, setBroken] = useState(false);
+    const clean = sku.trim();
+    if (!isDigits(clean)) return null;
+    if (broken) {
+        return (
+            <Forms.FormText>
+                {T("Bu numaranın önizlemesi yok — yine de kopyalayıp deneyebilirsin.", "No preview for this ID — you can still copy and try it.")}
+            </Forms.FormText>
+        );
+    }
+    return (
+        <img
+            key={clean}
+            src={shopStaticUrl(clean)}
+            alt=""
+            width={48}
+            height={48}
+            loading="lazy"
+            onError={() => setBroken(true)}
+            style={{ borderRadius: 10, objectFit: "cover" }}
+            title={T("Canlı önizleme", "Live preview")}
+        />
+    );
+}
+
 const ORIGINAL_REPO = "https://github.com/riolubruh/YABDP4Nitro";
 
 function CreditRow() {
@@ -586,6 +684,10 @@ export function ProfileSettingsUI() {
     const [style, setStyle] = useState("");
     const [banner, setBanner] = useState("");
     const [photo, setPhoto] = useState("");
+    const [galTheme, setGalTheme] = useState(false);
+    const [galEffect, setGalEffect] = useState(false);
+    const [galDecor, setGalDecor] = useState(false);
+    const [galPlate, setGalPlate] = useState(false);
 
     return (
         <div>
@@ -604,28 +706,89 @@ export function ProfileSettingsUI() {
                     <Row label={T("Tema rengi", "Theme colors")} hint={T("İki renk kodu, örn. 5865f2 ve eb459e.", "Two color codes, e.g. 5865f2 and eb459e.")}>
                         <TextInput value={c1} onChange={setC1} placeholder="5865f2" style={{ width: 110 }} />
                         <TextInput value={c2} onChange={setC2} placeholder="eb459e" style={{ width: 110 }} />
+                        <span
+                            title={`#${c1.trim().replace("#", "")} + #${c2.trim().replace("#", "")}`}
+                            style={{
+                                width: 48,
+                                height: 28,
+                                borderRadius: 8,
+                                background: `linear-gradient(135deg, #${c1.trim().replace("#", "") || "5865f2"}, #${c2.trim().replace("#", "") || "eb459e"})`,
+                            }}
+                        />
                         <CopyBtn valid={isHex(c1) && isHex(c2)} make={() => makeThemeCode(c1.trim().replace("#", ""), c2.trim().replace("#", ""))} />
+                        <GalleryShell open={galTheme} onToggle={() => setGalTheme(!galTheme)}>
+                            {THEME_PRESETS.map(p => {
+                                const selected = c1.trim().replace("#", "").toLowerCase() === p.c1 && c2.trim().replace("#", "").toLowerCase() === p.c2;
+                                return (
+                                    <div
+                                        key={p.c1 + p.c2}
+                                        onClick={() => { setC1(p.c1); setC2(p.c2); }}
+                                        title={p.name}
+                                        style={{
+                                            width: 78,
+                                            padding: 6,
+                                            borderRadius: 10,
+                                            cursor: "pointer",
+                                            textAlign: "center",
+                                            border: selected ? "2px solid #5865f2" : "2px solid transparent",
+                                            background: selected ? "rgba(88,101,242,0.12)" : "transparent",
+                                        }}
+                                    >
+                                        <div style={{ width: 56, height: 56, margin: "0 auto", borderRadius: 10, background: `linear-gradient(135deg, #${p.c1}, #${p.c2})` }} />
+                                        <div style={{ fontSize: 11, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
+                                    </div>
+                                );
+                            })}
+                        </GalleryShell>
                     </Row>
 
-                    <Row label={T("Profil efekti", "Profile effect")} hint={T("Efektin numarası.", "The effect's ID.")}>
-                        <TextInput value={effect} onChange={setEffect} placeholder="123456" style={{ width: 160 }} />
+                    <Row label={T("Profil efekti", "Profile effect")} hint={T("Efektin numarası. Galeriden seç ya da kendi numaranı yaz.", "The effect's ID. Pick from the gallery or type your own.")}>
+                        <TextInput value={effect} onChange={v => setEffect(extractSkuId(v))} placeholder="123456" style={{ width: 160 }} />
                         <CopyBtn valid={isDigits(effect)} make={() => makeEffectCode(effect.trim())} />
+                        <GalleryShell open={galEffect} onToggle={() => setGalEffect(!galEffect)}>
+                            {EFFECT_PRESETS.map(p => (
+                                <PresetTile key={p.sku} img={p.thumb} name={p.name} sku={p.sku} selected={effect.trim() === p.sku} onPick={() => setEffect(p.sku)} />
+                            ))}
+                        </GalleryShell>
                     </Row>
 
-                    <Row label={T("Profil çerçevesi", "Profile frame")} hint={T("Çerçevenin numarası.", "The frame's ID.")}>
-                        <TextInput value={frame} onChange={setFrame} placeholder="123456" style={{ width: 160 }} />
+                    <Row label={T("Profil çerçevesi", "Profile frame")} hint={T("Çerçevenin numarası. Mağazadaki ürün bağlantısındaki uzun sayı.", "The frame's ID. The long number in the shop product link.")}>
+                        <TextInput value={frame} onChange={v => setFrame(extractSkuId(v))} placeholder="123456" style={{ width: 160 }} />
+                        <SkuPreview sku={frame} />
                         <CopyBtn valid={isDigits(frame)} make={() => makeFrameCode(frame.trim())} />
                     </Row>
 
-                    <Row label={T("Avatar süsü", "Avatar decoration")} hint={T("Süslemenin numarası. Discord resmi çözerse görünür.", "The decoration's ID. Shows if Discord resolves it.")}>
-                        <TextInput value={decor} onChange={setDecor} placeholder="123456" style={{ width: 160 }} />
+                    <Row label={T("Avatar süsü", "Avatar decoration")} hint={T("Süslemenin numarası. Galeriden seç ya da kendi numaranı yaz, önizlemesi yanında belirir. Discord resmi çözerse görünür.", "The decoration's ID. Pick from the gallery or type your own, the preview appears next to it. Shows if Discord resolves it.")}>
+                        <TextInput value={decor} onChange={v => setDecor(extractSkuId(v))} placeholder="123456" style={{ width: 160 }} />
+                        <SkuPreview sku={decor} />
                         <CopyBtn valid={isDigits(decor)} make={() => makeDecorCode(decor.trim())} />
+                        <GalleryShell open={galDecor} onToggle={() => setGalDecor(!galDecor)}>
+                            {DECOR_PRESETS.map(p => (
+                                <PresetTile key={p.sku} img={shopStaticUrl(p.sku)} name={p.name} sku={p.sku} selected={decor.trim() === p.sku} onPick={() => setDecor(p.sku)} />
+                            ))}
+                        </GalleryShell>
                     </Row>
 
-                    <Row label={T("İsim plakası", "Nameplate")} hint={T("Plaka numarası ve renk paleti. Discord resmi çözerse görünür.", "Plate ID and color palette. Shows if Discord resolves it.")}>
-                        <TextInput value={plateSku} onChange={setPlateSku} placeholder={T("numara", "id")} style={{ width: 130 }} />
+                    <Row label={T("İsim plakası", "Nameplate")} hint={T("Plaka numarası ve renk paleti. Galeriden seç ya da kendi numaranı yaz, önizlemesi yanında belirir. Discord resmi çözerse görünür.", "Plate ID and color palette. Pick from the gallery or type your own, the preview appears next to it. Shows if Discord resolves it.")}>
+                        <TextInput value={plateSku} onChange={v => setPlateSku(extractSkuId(v))} placeholder={T("numara", "id")} style={{ width: 130 }} />
                         <TextInput value={platePal} onChange={setPlatePal} placeholder={T("palet", "palette")} style={{ width: 130 }} />
+                        <SkuPreview sku={plateSku} />
                         <CopyBtn valid={isDigits(plateSku) && isToken(platePal)} make={() => makePlateCode(plateSku.trim(), platePal.trim())} />
+                        <div style={{ flexBasis: "100%" }}>
+                            <Forms.FormText>{T("Kabul edilen renkler:", "Accepted colors:")} {PLATE_PALETTES.join(", ")}</Forms.FormText>
+                        </div>
+                        <GalleryShell open={galPlate} onToggle={() => setGalPlate(!galPlate)}>
+                            {PLATE_PRESETS.map(p => (
+                                <PresetTile
+                                    key={p.sku}
+                                    img={shopStaticUrl(p.sku)}
+                                    name={`${p.name} (${p.palette})`}
+                                    sku={p.sku}
+                                    selected={plateSku.trim() === p.sku && platePal.trim() === p.palette}
+                                    onPick={() => { setPlateSku(p.sku); setPlatePal(p.palette); }}
+                                />
+                            ))}
+                        </GalleryShell>
                     </Row>
 
                     <Row label={T("İsim stili", "Name style")} hint={T("Biçim: yazıtipi,efekt,renkler. Örn. 1,0.", "Format: font,effect,colors. E.g. 1,0.")}>

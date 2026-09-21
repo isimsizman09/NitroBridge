@@ -820,7 +820,7 @@ export default definePlugin({
         },
         // Voice tile background from fake banners (verified shape, current code).
         {
-            find: "pulseSpeakingIndicator:m",
+            find: "pulseSpeakingIndicator",
             predicate: () => settings.store.voiceTile,
             replacement: {
                 match: /userId:(\i)(,guildId:\i,pulseSpeakingIndicator:\i=!1,speaking:\i=!1,\.\.\.\i\}=\i,)(C=)(\i)(\?\?)(\i)(,)/,
