@@ -471,24 +471,28 @@ function stripMessageEmbeds(msg: any) {
     try {
         if (!settings.store.showAsEmoji) return;
         if (!msg || !Array.isArray(msg.embeds) || !msg.embeds.length) return;
-        if (typeof msg.content !== "string" || !msg.content.includes("cdn.discordapp.com/emojis/")) return;
         // Ids referenced in the text (markdown links and raw codes).
         const wanted = new Set<string>();
-        for (const l of emojiHrefs(msg.content)) {
-            const id = emojiIdOf(l);
-            if (id) wanted.add(id);
+        const hasContent = typeof msg.content === "string";
+        if (hasContent && msg.content.includes("cdn.discordapp.com/emojis/")) {
+            for (const l of emojiHrefs(msg.content)) {
+                const id = emojiIdOf(l);
+                if (id) wanted.add(id);
+            }
+            CUSTOM_EMOJI_RE.lastIndex = 0;
+            let m: RegExpExecArray | null;
+            while ((m = CUSTOM_EMOJI_RE.exec(msg.content)) !== null) {
+                if (m[1]) wanted.add(m[1]);
+            }
+            CUSTOM_EMOJI_RE.lastIndex = 0;
+            if (!wanted.size) return;
         }
-        CUSTOM_EMOJI_RE.lastIndex = 0;
-        let m: RegExpExecArray | null;
-        while ((m = CUSTOM_EMOJI_RE.exec(msg.content)) !== null) {
-            if (m[1]) wanted.add(m[1]);
-        }
-        CUSTOM_EMOJI_RE.lastIndex = 0;
-        if (!wanted.size) return;
         // Previews may come proxied (media host), so match by emoji id anywhere in the URL.
+        // Update events often carry no content: then any cdn-emoji preview goes (only we make those links).
         const kept = msg.embeds.filter((e: any) => {
             const id = emojiIdOf(e?.url) ?? emojiIdOf(e?.image?.url);
-            return !id || !wanted.has(id);
+            if (!id) return true;
+            return hasContent ? !wanted.has(id) : false;
         });
         if (kept.length !== msg.embeds.length) msg.embeds = kept;
     } catch { /* ignore */ }
