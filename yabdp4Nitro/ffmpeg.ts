@@ -16,8 +16,8 @@ const FFMPEG_COMMIT = "3f336c0a378cb29e503a6a83c3063532e46cfef1";
 const FFMPEG_BASE = `https://raw.githubusercontent.com/riolubruh/YABDP4Nitro/${FFMPEG_COMMIT}/ffmpeg/`;
 
 const EXPECTED_HASHES: Record<string, string> = {
-    "ffmpeg.js": "ad4cfefe957589995dea03fc8de1fd5e9f5cb4558a7282913172203082a65bbfaa",
-    "814.ffmpeg.js": "976f4174ae7da80c0d4f9523ee392b2a5322049abb9b8627",
+    "ffmpeg.js": "ad4cfe957589995dea03fc8de1fd5e9f5cb4558a7282913172203082a65bbfaa",
+    "814.ffmpeg.js": "976f4174ae7da80c0d4f9523ee6dde3ecbce7dc2ee392b2a5322049abb9b8627",
     "ffmpeg-core.js": "b266ab5b952555881dd6310663986994a182acb2b7ff25cf10a25f7a37ac2b21",
     "ffmpeg-core.wasm": "9f57947a5bd530d8f00c5b3f2cb2a3492faa7e5d823315342d6a8656d0a6b7b7"
 };
@@ -48,7 +48,7 @@ async function fetchVerified(name: string): Promise<Uint8Array> {
         if (expected) {
             const actual = await sha256Hex(bytes);
             if (actual !== expected.toLowerCase()) {
-                log.warn(`hash mismatch, continuing anyway: ${name}`, { expected, actual });
+                throw new Error(`ffmpeg file failed verification, refusing to run: ${name} (got ${actual.slice(0, 16)}…)`);
             }
         }
         return bytes;
